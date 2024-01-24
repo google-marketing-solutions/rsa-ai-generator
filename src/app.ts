@@ -72,6 +72,47 @@ const Config = {
     rsa_description_min_length: 10,
   },
 };
+function getErrorFromResponse(response_text: string) {
+  let error_msg = '';
+  try {
+    const res_json = JSON.parse(response_text);
+    /* Example:
+      [{
+        "error": {
+          "code": 403,
+          "message": "The caller does not have permission",
+          "status": "PERMISSION_DENIED",
+          "details": [
+            {
+              "@type": "type.googleapis.com/google.ads.googleads.v15.errors.GoogleAdsFailure",
+              "errors": [
+                {
+                  "errorCode": {
+                    "authorizationError": "DEVELOPER_TOKEN_PROHIBITED"
+                  },
+                  "message": "Developer token is not allowed with project 'xxxxxx'."
+                }
+              ],
+              "requestId": "AoGJHSjsd-xxxxx"
+            }
+          ]
+        }
+      }
+      ]
+     */
+    const data = res_json && res_json.length ? res_json[0] : null;
+    if (data.error) {
+      error_msg = data.error.message;
+      if (data.error.details && data.error.details.length) {
+        error_msg =
+          error_msg + '. ' + data.error.details[0].errors?.[0]?.message;
+      }
+    }
+  } catch {
+    // skip
+  }
+  return error_msg;
+}
 
 function fetchJson(url: string, params: any, retryNum?: number) {
   if (!retryNum) retryNum = 0;
@@ -92,7 +133,8 @@ function fetchJson(url: string, params: any, retryNum?: number) {
   const response_text = response.getContentText();
   Logger.log('Code: ' + code + '\nResponse:\n' + response_text);
   if (code === 403) {
-    throw new Error(`Permission denined`);
+    const error_msg = getErrorFromResponse(response_text);
+    throw new Error(`Permission denined` + error_msg ? ': ' + error_msg : '');
   }
   if (code === 502 || code === 504 || code === 504) {
     // 502 - Bad Gateway
@@ -106,16 +148,7 @@ function fetchJson(url: string, params: any, retryNum?: number) {
     return fetchJson(url, params, retryNum);
   }
   if (code !== 200) {
-    let error_msg;
-    try {
-      const res_json = JSON.parse(response_text);
-      const data = res_json && res_json.length ? res_json[0] : null;
-      if (data.error) {
-        error_msg = data.error.message;
-      }
-    } catch {
-      // skip
-    }
+    let error_msg = getErrorFromResponse(response_text);
     error_msg =
       error_msg || `API call has failed (url: ${url}) with code ${code}`;
     throw new Error(error_msg);

@@ -29,7 +29,7 @@ app;
  */
 function onOpen(var_name: string) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.addMenu('AI-generative RSA', [
+  ss.addMenu('RSA AI Generator', [
     { name: 'Fetch keywords', functionName: var_name + '.fetch_keywords' },
     {
       name: 'Generate headlines/descriptions via AI',
