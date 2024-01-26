@@ -15,63 +15,10 @@
  * limitations under the License.
  */
 
+import { ConfigReader, SETTINGS, Config } from './config';
+
 export const app = null;
 
-const Config = {
-  sheets: {
-    Configuration: 'Configuration',
-  },
-  settingsNames: {
-    CID: 'CID',
-    MCC: 'MCC',
-    ADS_DEV_TOKEN: 'ADS_DEV_TOKEN',
-    CLOUD_PROJECT_ID: 'CLOUD_PROJECT_ID',
-    CLOUD_PROJECT_REGION: 'CLOUD_PROJECT_REGION',
-    CUSTOMER_NAME: 'CUSTOMER_NAME',
-    LLM_temperature: 'LLM_temperature',
-    LLM_topK: 'LLM_topK',
-    LLM_topP: 'LLM_topP',
-    LLM_Prompt_Headlines: 'LLM_Prompt_Headlines',
-    LLM_Prompt_Headlines_Shorten: 'LLM_Prompt_Headlines_Shorten',
-    LLM_Prompt_Descriptions: 'LLM_Prompt_Descriptions',
-    ADSEDITOR_add_long_headlines: 'ADSEDITOR_add_long_headlines',
-    ADSEDITOR_add_long_descriptions: 'ADSEDITOR_add_long_descriptions',
-    ADSEDITOR_add_generic_headlines: 'ADSEDITOR_add_generic_headlines',
-    ADSEDITOR_add_generic_descriptions: 'ADSEDITOR_add_generic_descriptions',
-    LOGGING: 'LOGGING',
-  },
-  network: {
-    maxRetryCount: 100,
-    retryDelay: 100,
-  },
-  // settings for VertexAi
-  vertexAi: {
-    endpoint: 'aiplatform.googleapis.com',
-    location: 'us-central1',
-    maxRetries: 3,
-    quotaLimitDelay: 30 * 1000, // 30s
-    modelName: 'gemini-pro',
-    // model default params (they are taken from Python official package (vertextai.language_models))
-    modelParams: {
-      temperature: undefined, // temperature: Controls the randomness of predictions. Range: [0, 1].
-      maxOutputTokens: 8192, // Max length of the output text in tokens.
-      topK: undefined, // The number of highest probability vocabulary tokens to keep for top-k-filtering.
-      topP: undefined, // The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Range: [0, 1].
-    },
-    // https://cloud.google.com/vertex-ai/docs/generative-ai/learn/responsible-ai#limitations
-    maxRequestLength: 8 * 1024,
-  },
-  // settings for Ads API
-  adsApi: {
-    api_versions: 'v15',
-  },
-  ads: {
-    rsa_headline_max_length: 30,
-    rsa_headline_min_length: 5,
-    rsa_description_max_length: 90,
-    rsa_description_min_length: 10,
-  },
-};
 function getErrorFromResponse(response_text: string) {
   let error_msg = '';
   try {
@@ -156,22 +103,6 @@ function fetchJson(url: string, params: any, retryNum?: number) {
   return JSON.parse(response_text);
 }
 
-class ConfigReader {
-  static getValue(name: string) {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-      Config.sheets.Configuration
-    );
-    if (!sheet) return '';
-    const values = sheet.getRange(1, 1, sheet.getLastRow(), 2).getValues();
-    for (const row of values) {
-      if (row[0].toLowerCase() === name.toLowerCase()) {
-        return row[1];
-      }
-    }
-    return '';
-  }
-}
-
 export interface GoogleAdsClientOptions {
   devToken?: string;
   mccId?: string;
@@ -250,16 +181,15 @@ export class GoogleAdsClient {
 }
 
 export async function fetch_keywords() {
-  const mccId = ConfigReader.getValue(Config.settingsNames.MCC);
-  const seedCustomerId =
-    ConfigReader.getValue(Config.settingsNames.CID) || mccId;
+  const mccId = ConfigReader.getValue(SETTINGS.MCC);
+  const seedCustomerId = ConfigReader.getValue(SETTINGS.CID) || mccId;
   if (!seedCustomerId) {
     SpreadsheetApp.getUi().alert(
       'Please specify a customer id in the CID and/or MCC fields on the Configuration sheet'
     );
     return;
   }
-  const devToken = ConfigReader.getValue(Config.settingsNames.ADS_DEV_TOKEN);
+  const devToken = ConfigReader.getValue(SETTINGS.ADS_DEV_TOKEN);
   if (!devToken) {
     SpreadsheetApp.getUi().alert(
       'Please specify a developer token on the Configuration sheet'
@@ -440,12 +370,8 @@ interface AdGroup {
  * Goes through all keywords (they should be fetched first via fetch_keywords) and generates headlines via PaLM API.
  */
 export function generate_rsa(rowToProcess?: number) {
-  const project_id = ConfigReader.getValue(
-    Config.settingsNames.CLOUD_PROJECT_ID
-  );
-  const gcp_region = ConfigReader.getValue(
-    Config.settingsNames.CLOUD_PROJECT_REGION
-  );
+  const project_id = ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_ID);
+  const gcp_region = ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_REGION);
   if (!project_id) {
     SpreadsheetApp.getUi().alert(
       'Please provide a GCP project id on the Configuration sheet (you should also enable Vertex API in that proejct)'
@@ -461,9 +387,7 @@ export function generate_rsa(rowToProcess?: number) {
     );
     return;
   }
-  const customerName = ConfigReader.getValue(
-    Config.settingsNames.CUSTOMER_NAME
-  );
+  const customerName = ConfigReader.getValue(SETTINGS.CUSTOMER_NAME);
   if (!customerName) {
     SpreadsheetApp.getUi().alert(
       'Please specify a customer name on the Configuration sheet'
@@ -474,9 +398,8 @@ export function generate_rsa(rowToProcess?: number) {
   //const api = new PalmChatApi(project_id, gcp_region);
   const api = new GeminiVertexApi(project_id, gcp_region);
   api.logging =
-    ConfigReader.getValue(Config.settingsNames.LOGGING)
-      .toString()
-      .toLocaleUpperCase() === 'TRUE';
+    ConfigReader.getValue(SETTINGS.LOGGING).toString().toLocaleUpperCase() ===
+    'TRUE';
   const predictor = new Predictor(api, customerName);
 
   let rowNo = rowToProcess || 2;
@@ -639,18 +562,18 @@ export function generate_ads_editor() {
     .getValues();
 
   const add_long_headlines =
-    ConfigReader.getValue(Config.settingsNames.ADSEDITOR_add_long_headlines)
+    ConfigReader.getValue(SETTINGS.ADSEDITOR_add_long_headlines)
       .toString()
       .toLocaleUpperCase() === 'TRUE';
   const add_long_descriptions =
-    ConfigReader.getValue(Config.settingsNames.ADSEDITOR_add_long_descriptions)
+    ConfigReader.getValue(SETTINGS.ADSEDITOR_add_long_descriptions)
       .toString()
       .toLocaleUpperCase() === 'TRUE';
   const add_generic_headlines = ConfigReader.getValue(
-    Config.settingsNames.ADSEDITOR_add_generic_headlines
+    SETTINGS.ADSEDITOR_add_generic_headlines
   );
   const add_generic_descriptions = ConfigReader.getValue(
-    Config.settingsNames.ADSEDITOR_add_generic_descriptions
+    SETTINGS.ADSEDITOR_add_generic_descriptions
   );
   let genericHeadlines;
   let genericDescriptions;
@@ -775,13 +698,13 @@ class Predictor {
     this.api = api;
     this.customerName = customerName;
     this.promptHeadlinesTemplate = ConfigReader.getValue(
-      Config.settingsNames.LLM_Prompt_Headlines
+      SETTINGS.LLM_Prompt_Headlines
     );
     this.promptHeadlinesShortenTemplate = ConfigReader.getValue(
-      Config.settingsNames.LLM_Prompt_Headlines_Shorten
+      SETTINGS.LLM_Prompt_Headlines_Shorten
     );
     this.promptDescriptionsTemplate = ConfigReader.getValue(
-      Config.settingsNames.LLM_Prompt_Descriptions
+      SETTINGS.LLM_Prompt_Descriptions
     );
     this.history = [];
   }
@@ -859,19 +782,26 @@ class Predictor {
       Logger.log(
         `[AdGroup ${adgroup.adgroup_id}] Model's 2nd reply (normalized): ${reply}`
       );
-      long_lines = reply
-        .split('\n')
-        .filter(line => line.length > MAX || line.length < MIN);
+      const long_lines2 = reply
+        ? reply
+            .split('\n')
+            .filter(line => line.length > MAX || line.length < MIN)
+        : [];
+      if (long_lines2.length) {
+        long_lines = long_lines2;
+      }
       const new_headlines = reply
-        .split('\n')
-        .filter(line => line.length <= MAX && line.length >= MIN);
+        ? reply
+            .split('\n')
+            .filter(line => line.length <= MAX && line.length >= MIN)
+        : [];
       headlines.push(...new_headlines);
 
-      if (long_lines.length) {
+      if (long_lines2.length) {
         Logger.log(
-          `WARNING: Model's response again (after 2nd prompt) contains too long/short headlines (${long_lines.length}):`
+          `WARNING: Model's response again (after 2nd prompt) contains too long/short headlines (${long_lines2.length}):`
         );
-        Logger.log(long_lines);
+        Logger.log(long_lines2);
       }
     }
     const result = {
@@ -900,11 +830,13 @@ class Predictor {
     const MIN = Config.ads.rsa_description_min_length;
     const MAX = Config.ads.rsa_description_max_length;
     const descriptions = reply
-      .split('\n')
-      .filter(line => line.length <= MAX && line.length >= MIN);
+      ? reply
+          .split('\n')
+          .filter(line => line.length <= MAX && line.length >= MIN)
+      : [];
     const long_lines = reply
-      .split('\n')
-      .filter(line => line.length > MAX || line.length < MIN);
+      ? reply.split('\n').filter(line => line.length > MAX || line.length < MIN)
+      : [];
 
     Logger.log(
       `[AdGroup ${
@@ -1114,7 +1046,9 @@ class GeminiVertexApi {
       let reply = '';
       for (const res_item of res) {
         const text = this._parseResponse(res_item, prompt);
-        reply += text;
+        if (text) {
+          reply += text;
+        }
       }
       history.push({
         role: 'model',

@@ -44,6 +44,9 @@ function onOpen(var_name: string) {
       name: 'DEBUG: Generate headlines/descriptions for current row',
       functionName: var_name + '.generate_rsa_current_row',
     },
-    //{name: 'Show prompt'}
+    {
+      name: 'Reset configuration',
+      functionName: var_name + '.reset_configuration',
+    },
   ]);
 }
