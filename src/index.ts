@@ -41,12 +41,16 @@ function onOpen(var_name: string) {
     },
     null,
     {
-      name: 'DEBUG: Generate headlines/descriptions for current row',
+      name: 'DEBUG: Generate headlines/descriptions for the selected row',
       functionName: var_name + '.generate_rsa_current_row',
     },
     {
       name: 'Reset configuration',
       functionName: var_name + '.reset_configuration',
+    },
+    {
+      name: 'Reveal prompts',
+      functionName: var_name + '.reveal_prompts',
     },
   ]);
 }

@@ -66,6 +66,12 @@ function fetchJson(url: string, params: any, retryNum?: number) {
   if (!params.contentType) {
     params.contentType = 'application/json';
   }
+  // TODO: check 'logging' setting
+  // if (this.logging) {
+  //   Logger.log(
+  //     `Request to ${this.url}\n: ${JSON.stringify(request)}`
+  //   );
+  // }
   const response = UrlFetchApp.fetch(url, params);
   const code = response.getResponseCode();
   if (code === 429) {
@@ -78,6 +84,7 @@ function fetchJson(url: string, params: any, retryNum?: number) {
     return fetchJson(url, params);
   }
   const response_text = response.getContentText();
+  // TODO: check 'logging' setting
   Logger.log('Code: ' + code + '\nResponse:\n' + response_text);
   if (code === 403) {
     const error_msg = getErrorFromResponse(response_text);
@@ -108,6 +115,7 @@ export interface GoogleAdsClientOptions {
   mccId?: string;
   apiVersion?: string;
 }
+
 export class GoogleAdsClient {
   devToken: string;
   mccId: string;
@@ -415,6 +423,12 @@ export function generate_rsa(rowToProcess?: number) {
   const COL_Headlines = columns.indexOf('headlines') + 1;
   const COL_Descriptions = columns.indexOf('descriptions') + 1;
 
+  if (COL_Headlines === 0) {
+    throw new Error('Could not fild a column with title "headlines"');
+  }
+  if (COL_Descriptions === 0) {
+    throw new Error('Could not fild a column with title "descriptions"');
+  }
   for (const row of values) {
     // each row is an unique adgroup
     const adGroup: AdGroup = {
@@ -497,8 +511,16 @@ export function generate_rsa(rowToProcess?: number) {
 }
 
 export function generate_rsa_current_row() {
-  const row = SpreadsheetApp.getCurrentCell().getRowIndex();
-  generate_rsa(row);
+  const ui = SpreadsheetApp.getUi();
+  let row = SpreadsheetApp.getCurrentCell().getRowIndex();
+  const res = ui.prompt(
+    `Run generation for the row with index ${row}. Or enter another row index`,
+    ui.ButtonSet.YES_NO
+  );
+  if (res.getSelectedButton() === ui.Button.YES) {
+    row = res.getResponseText() ? parseInt(res.getResponseText()) : row;
+    generate_rsa(row);
+  }
 }
 
 export function generate_ads_editor() {
@@ -682,13 +704,37 @@ export function generate_ads_editor() {
   sheetDst.getRange(2, 1, rows.length, columns.length).setValues(rows);
 }
 
-class Predictor {
+export class Predictor {
   api: GeminiVertexApi;
   customerName: string;
   promptHeadlinesTemplate: string;
   promptHeadlinesShortenTemplate: string;
   promptDescriptionsTemplate: string;
   history: any[];
+
+  static DEFAULT_PROMPT_HEADLINES = `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
+Please generate 15 best selling creative headlines of maximum 25 symbols each for a Google Ads search campaign (RSA) using the following keywords as an input (each keyword is on a separate line):
+
+{KEYWORDS}
+
+Please strictly limit each headline to 25 characters.
+Please reply in JSON format and return a JSON array with headlines as elements. Do not add any special symbols, e.g. emoji, to generated text`;
+  //Return only a list of headlines, one per line, do not add any markup or any additional text.`
+  static DEFAULT_PROMPT_HEADLINES_SHORTEN = `Some of the generated headlines are shorter or longer than the minimum ({MIN}) and the maximum ({MAX}) respectedly.
+Please rewrite them to be not shorter than {MIN} and not longer than {MAX}.
+Please reply in JSON format and return a JSON array with headlines as elements.
+Again do not add anything to your generated text. The headlines to normalize are:\n\n{HEADLINES}`;
+  static DEFAULT_PROMPT_DESCRIPTIONS = `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
+Please generate 4 best selling creative descriptions of maximum 80 characters each for a Google Ads search campaign (RSA) using the following keywords as an input (each keyword is on a separate line):
+
+{KEYWORDS}
+
+And the following headlines you previously created:
+{HEADLINES}
+
+Please strictly limit each description to 80 characters.
+Please reply in JSON format and return a JSON array with descriptions as elements.
+Do not add any special symbols, e.g. emoji, to generated text.`;
 
   /**
    * @param {PalmApi} api
@@ -697,15 +743,15 @@ class Predictor {
   constructor(api: GeminiVertexApi, customerName: string) {
     this.api = api;
     this.customerName = customerName;
-    this.promptHeadlinesTemplate = ConfigReader.getValue(
-      SETTINGS.LLM_Prompt_Headlines
-    );
-    this.promptHeadlinesShortenTemplate = ConfigReader.getValue(
-      SETTINGS.LLM_Prompt_Headlines_Shorten
-    );
-    this.promptDescriptionsTemplate = ConfigReader.getValue(
-      SETTINGS.LLM_Prompt_Descriptions
-    );
+    this.promptHeadlinesTemplate =
+      ConfigReader.getValue(SETTINGS.LLM_Prompt_Headlines) ||
+      Predictor.DEFAULT_PROMPT_HEADLINES;
+    this.promptHeadlinesShortenTemplate =
+      ConfigReader.getValue(SETTINGS.LLM_Prompt_Headlines_Shorten) ||
+      Predictor.DEFAULT_PROMPT_HEADLINES_SHORTEN;
+    this.promptDescriptionsTemplate =
+      ConfigReader.getValue(SETTINGS.LLM_Prompt_Descriptions) ||
+      Predictor.DEFAULT_PROMPT_DESCRIPTIONS;
     this.history = [];
   }
 
@@ -714,21 +760,25 @@ class Predictor {
   }
 
   normalizeReply(reply: string) {
+    reply = reply || '';
+    let headlines = '';
+    if (reply.trim().startsWith('```')) {
+      reply = reply.replace(/```json/, '').replaceAll(/```/g, '');
+      try {
+        const json_reply = JSON.parse(reply);
+        headlines = json_reply.join('\n');
+      } catch (e) {
+        Logger.log('WARNING: failed to parse response as JSON: ' + e);
+        /* empty */
+      }
+    }
+    if (headlines) {
+      return headlines;
+    }
     const lines = reply.split('\n');
-    const headlines = lines
+    headlines = lines
       .map(line => {
-        // if (line.startsWith("* ")) {
-        //   line = line.replace("* ", "");
-        // }
-        // else if (line.startsWith("- ")) {
-        //   line = line.replace("- ", "");
-        // }
-        // else if (/^[\d]+\.?\s+/.test(line)) {
-        //   line = line.replace(/^[\d]+.?\s+/, '');
-        // }
-        //
         line = line.replace(/^\s*[\d]+.?\s+|^\s+|^\*\s*|^-\s*|^•\s*/, '');
-
         if (line.startsWith(this.customerName + ':')) {
           line = line.substring((this.customerName + ':').length, line.length);
         }
@@ -763,7 +813,7 @@ class Predictor {
     }
     const MAX = Config.ads.rsa_headline_max_length;
     const MIN = Config.ads.rsa_headline_min_length;
-    const org_headlines_arr = reply.split('\n');
+    const org_headlines_arr = reply ? reply.split('\n') : [];
     let long_lines = org_headlines_arr.filter(
       line => line.length > MAX || line.length < MIN
     );
@@ -857,17 +907,7 @@ class Predictor {
    */
   getHeadlinesPrompt(adgroup: AdGroup) {
     const customerName = this.customerName || ' a ';
-    const promptTemplate =
-      this.promptHeadlinesTemplate ||
-      `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
-Please generate 15 best selling creative headlines of maximum 25 symbols each for a Google Ads search campaign (RSA) using the following keywords as an input (each keyword is on a separate line):
-
-{KEYWORDS}
-
-Please strictly limit each headline to 25 characters.
-Return only a list of headlines, one per line, do not add any markup or any additional text.`;
-
-    return this._getPrompt(promptTemplate, adgroup.keywords, {
+    return this._getPrompt(this.promptHeadlinesTemplate, adgroup.keywords, {
       CUSTOMER_NAME: customerName,
     });
   }
@@ -878,9 +918,7 @@ Return only a list of headlines, one per line, do not add any markup or any addi
    * @param {string[]} line_lines
    */
   getHeadlines2ndPrompt(adgroup: AdGroup, long_lines: string[]) {
-    const promptTemplate =
-      this.promptHeadlinesShortenTemplate ||
-      `Some of the generated headlines are shorter or longer than the minimum ({MIN}) and the maximum ({MAX}), please rewrite them to be not shorter than {MIN} and not longer than {MAX}. Again do not add anything to your response except rewritten headlines:\n\n{HEADLINES}`;
+    const promptTemplate = this.promptHeadlinesShortenTemplate;
     const long_headlines = long_lines.map(line => '* ' + line).join('\n');
     return this._getPrompt(promptTemplate, undefined, {
       HEADLINES: long_headlines,
@@ -891,19 +929,8 @@ Return only a list of headlines, one per line, do not add any markup or any addi
 
   getDescriptionsPrompt(adgroup: AdGroup) {
     const customerName = this.customerName || ' a ';
-    const promptTemplate =
-      this.promptDescriptionsTemplate ||
-      `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
-Please generate 4 best selling creative descriptions of maximum 80 characters each for a Google Ads search campaign (RSA) using the following keywords as an input (each keyword is on a separate line):
-
-{KEYWORDS}
-
-And the following headlines you previously created:
-{HEADLINES}
-
-Please strictly limit each description to 80 characters.
-Return only a list of descriptions, one per line, do not add any markup or any additional text.`;
-
+    const promptTemplate = this.promptDescriptionsTemplate;
+    // Return only a list of descriptions, one per line, do not add any markup or any additional text
     return this._getPrompt(promptTemplate, adgroup.keywords, {
       CUSTOMER_NAME: customerName,
       HEADLINES: adgroup.all_headlines!.join('\n'),
@@ -1031,16 +1058,8 @@ class GeminiVertexApi {
       payload: JSON.stringify(data),
       muteHttpExceptions: true,
     };
-    if (this.logging) {
-      Logger.log(
-        `GeminiApi: request to ${this.url}\n: ${JSON.stringify(request)}`
-      );
-    }
 
     const res = fetchJson(this.url, request);
-    if (this.logging) {
-      Logger.log(`GeminiApi: recieved response: ${JSON.stringify(res)}`);
-    }
     if (res.length) {
       // streamGenerateContent returns an array of response that should be merged into one
       let reply = '';
@@ -1058,21 +1077,11 @@ class GeminiVertexApi {
           },
         ],
       });
+      if (this.logging) {
+        Logger.log(`GeminiApi: parsed response: ${reply}`);
+      }
       return reply;
-    }
-    // if (res.candidates) {
-    //   if (res.candidates[0].content) {
-    //     const result = res.candidates[0].content;
-    //     if (!result.parts[0].text) {
-    //       throw new Error(`Could not find expected response content. Full response: ${JSON.stringify(res)}`);
-    //     }
-    //     history.push(result.parts[0].text);
-    //     return result;
-    //   } else {
-    //     throw new Error(`Received empty response from API. Prompt: ${prompt}. Full response: ${JSON.stringify(res)}`);
-    //   }
-    // }
-    else if (res.promptFeedback && res.promptFeedback.blockReason) {
+    } else if (res.promptFeedback && res.promptFeedback.blockReason) {
       throw new Error(
         `Request was blocked as it triggered API safety filters. Reason: ${res.promptFeedback.blockReason}.\n Original prompt: ${prompt}`
       );
@@ -1085,12 +1094,12 @@ class GeminiVertexApi {
       if (res.candidates[0].content) {
         const result = res.candidates[0].content;
         if (!result.parts || !result.parts.length) {
-          return;
+          return '';
         }
         // if (!result.parts[0].text) {
         //   throw new Error(`Could not find expected response content. Full response: ${JSON.stringify(res)}`);
         // }
-        return result.parts[0].text;
+        return result.parts[0].text || '';
       } else {
         throw new Error(
           `Received empty response from API. Prompt: ${prompt}. Full response: ${JSON.stringify(
@@ -1099,6 +1108,7 @@ class GeminiVertexApi {
         );
       }
     }
+    return '';
   }
 }
 

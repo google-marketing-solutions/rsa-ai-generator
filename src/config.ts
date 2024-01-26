@@ -1,3 +1,5 @@
+import { Predictor } from './app';
+
 /**
  * Copyright 2023 Google LLC
  *
@@ -84,9 +86,24 @@ export class ConfigReader {
     }
     return '';
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static setValue(name: string, value: any) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+      Config.sheets.Configuration
+    );
+    if (!sheet) return '';
+    const values = sheet.getRange(1, 1, sheet.getLastRow(), 2).getValues();
+    for (let i = 0; i < values.length; i++) {
+      const row = values[i];
+      if (row[0].toLowerCase() === name.toLowerCase()) {
+        sheet.getRange(i + 1, 2).setValue(value);
+      }
+    }
+  }
 }
 
-function reset_configuration() {
+export function reset_configuration() {
   let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
     Config.sheets.Configuration
   );
@@ -131,35 +148,18 @@ function reset_configuration() {
     ],
     [
       SETTINGS.LLM_Prompt_Headlines,
-      `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
-Please generate 15 best selling creative headlines of maximum 25 symbols each for a Google Ads search campaign (RSA) using the following keywords as an input (each keyword is on a separate line):
-
-{KEYWORDS}
-
-Please strictly limit each headline to 25 characters.
-Return only a list of headlines, one per line, do not add any markup or any additional text.`,
       '',
+      'Prompt for generating headlines. Leave blank for using the default. Support macros: CUSTOMER_NAME, KEYWORDS',
     ],
     [
       SETTINGS.LLM_Prompt_Headlines_Shorten,
-      `Some of the generated headlines are shorter or longer than the minimum ({MIN}) and the maximum ({MAX}), please rewrite them to be not shorter than {MIN} and not longer than {MAX}. Again do not add anything to your response except rewritten headlines:
-
-{HEADLINES}`,
       '',
+      'Prompt for shortening headlines. Leave blank for using the default. Support macros: MIN, MAX, HEADLINES',
     ],
     [
       SETTINGS.LLM_Prompt_Descriptions,
-      `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
-Please generate 4 best selling creative descriptions of maximum 80 characters each for a Google Ads search campaign (RSA) using the following keywords as an input (each keyword is on a separate line):
-
-{KEYWORDS}
-
-And the following headlines you previously created:
-{HEADLINES}
-
-Please strictly limit each description to 80 characters.
-Return only a list of descriptions, one per line, do not add any markup or any additional text`,
       '',
+      'Prompt for generating descriptions. Leave blank for using the default. Support macros: CUSTOMER_NAME, KEYWORDS, KEYWORDS',
     ],
     [
       SETTINGS.ADSEDITOR_add_long_headlines,
@@ -184,4 +184,19 @@ Return only a list of descriptions, one per line, do not add any markup or any a
     [SETTINGS.LOGGING, 'TRUE', ''],
   ];
   sheet?.getRange(1, 1, values.length, values[0].length).setValues(values);
+}
+
+export function reveal_prompts() {
+  ConfigReader.setValue(
+    SETTINGS.LLM_Prompt_Headlines,
+    Predictor.DEFAULT_PROMPT_HEADLINES
+  );
+  ConfigReader.setValue(
+    SETTINGS.LLM_Prompt_Headlines_Shorten,
+    Predictor.DEFAULT_PROMPT_HEADLINES_SHORTEN
+  );
+  ConfigReader.setValue(
+    SETTINGS.LLM_Prompt_Descriptions,
+    Predictor.DEFAULT_PROMPT_DESCRIPTIONS
+  );
 }
