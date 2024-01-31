@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { ConfigReader, SETTINGS, Config } from './config';
+import {
+  ConfigReader,
+  SETTINGS,
+  Config,
+  BlockingThreshold,
+  SafetyCategory,
+} from './config';
 
 export const app = null;
 
@@ -191,6 +197,7 @@ export class GoogleAdsClient {
 export async function fetch_keywords() {
   const mccId = ConfigReader.getValue(SETTINGS.MCC);
   const seedCustomerId = ConfigReader.getValue(SETTINGS.CID) || mccId;
+  const campaignId = ConfigReader.getValue(SETTINGS.CAMPAGIN);
   if (!seedCustomerId) {
     SpreadsheetApp.getUi().alert(
       'Please specify a customer id in the CID and/or MCC fields on the Configuration sheet'
@@ -218,7 +225,7 @@ export async function fetch_keywords() {
   let headers;
   let startRow = 2;
   for (const cid of customerIds) {
-    const kws = getAllKeywords(client, cid);
+    const kws = getAllKeywords(client, cid, campaignId);
     if (!kws || kws.length === 0) {
       Logger.log(`No keywords for customer ${cid} were found`);
       continue;
@@ -263,13 +270,15 @@ function convertObjectsToArrays(arrayOfObjects: AdGroup[]) {
  * Fetch all keywords for specific customer
  * @param {GoogleAdsClient} client
  * @param {String} customerId
+ * @param [String] campaignId
  * @returns {Array<AdGroup>}
  */
 function getAllKeywords(
   client: GoogleAdsClient,
-  customerId: string
+  customerId: string,
+  campaignId?: string
 ): AdGroup[] {
-  const query_kw = `SELECT
+  let query_kw = `SELECT
     customer.id,
     customer.descriptive_name,
     campaign.id,
@@ -285,14 +294,19 @@ function getAllKeywords(
     AND metrics.clicks > 0
   `;
 
-  const query_ads = `SELECT
+  let query_ads = `SELECT
     ad_group.id,
     ad_group_ad.ad.final_urls
   FROM ad_group_ad`;
-
+  if (campaignId) {
+    query_kw += `\nAND campaign.id = ${campaignId}`;
+    query_ads += `\nWHERE campaign.id = ${campaignId}`;
+  }
   let adgroup_id;
   const adgroup_urls: Record<number, string[]> = {};
+  Logger.log(`Fetching adgroups for CID=${customerId}, campaign=${campaignId}`);
   const rows_ads = client.execQuery(query_ads, customerId);
+
   if (rows_ads && rows_ads.length) {
     for (const row of rows_ads) {
       const urls = row.adGroupAd.ad.finalUrls;
@@ -307,6 +321,7 @@ function getAllKeywords(
     }
   }
 
+  Logger.log(`Fetching keywords for CID=${customerId}, campaign=${campaignId}`);
   const rows = client.execQuery(query_kw, customerId);
   if (!rows || !rows.length) {
     return [];
@@ -379,7 +394,6 @@ interface AdGroup {
  */
 export function generate_rsa(rowToProcess?: number) {
   const project_id = ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_ID);
-  const gcp_region = ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_REGION);
   if (!project_id) {
     SpreadsheetApp.getUi().alert(
       'Please provide a GCP project id on the Configuration sheet (you should also enable Vertex API in that proejct)'
@@ -403,8 +417,7 @@ export function generate_rsa(rowToProcess?: number) {
     return;
   }
 
-  //const api = new PalmChatApi(project_id, gcp_region);
-  const api = new GeminiVertexApi(project_id, gcp_region);
+  const api = new GeminiVertexApi(project_id);
   api.logging =
     ConfigReader.getValue(SETTINGS.LOGGING).toString().toLocaleUpperCase() ===
     'TRUE';
@@ -762,15 +775,14 @@ Do not add any special symbols, e.g. emoji, to generated text.`;
   normalizeReply(reply: string) {
     reply = reply || '';
     let headlines = '';
-    if (reply.trim().startsWith('```')) {
+    try {
       reply = reply.replace(/```json/, '').replaceAll(/```/g, '');
-      try {
-        const json_reply = JSON.parse(reply);
-        headlines = json_reply.join('\n');
-      } catch (e) {
-        Logger.log('WARNING: failed to parse response as JSON: ' + e);
-        /* empty */
-      }
+      const json_reply = JSON.parse(reply);
+      headlines = json_reply.join('\n');
+    } catch (e) {
+      Logger.log(
+        `WARNING: failed to parse response as JSON: ${e}, falling back to text`
+      );
     }
     if (headlines) {
       return headlines;
@@ -984,26 +996,51 @@ class GeminiVertexApi {
   url: string;
   modelParams: any;
   logging: boolean;
+  safetySettings: { category: SafetyCategory; threshold: BlockingThreshold }[];
 
-  constructor(
-    project_id: string,
-    gcp_region: string,
-    model_name?: string,
-    model_params?: any
-  ) {
+  constructor(project_id: string) {
     this.project_id = project_id;
-    if (!gcp_region) {
-      gcp_region = Config.vertexAi.location || 'us-central1';
+    const gcp_region =
+      ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_REGION) ||
+      Config.vertexAi.location ||
+      'us-central1';
+    const modelName =
+      ConfigReader.getValue(SETTINGS.LLM_Name) ||
+      Config.vertexAi.modelName ||
+      'gemini-pro';
+    this.url = `https://${gcp_region}-aiplatform.googleapis.com/v1/projects/${project_id}/locations/${gcp_region}/publishers/google/models/${modelName}:streamGenerateContent`;
+
+    const safetySettings = Object.assign({}, Config.vertexAi.safetySettings);
+    for (const category of Object.keys(Config.vertexAi.safetySettings)) {
+      const threshold = <BlockingThreshold>ConfigReader.getValue(category);
+      if (threshold) {
+        // safety category has an overriden threshold in Configuration
+        safetySettings[<SafetyCategory>category] = threshold;
+      }
     }
-    if (!model_name) {
-      model_name = Config.vertexAi.modelName || 'gemini-pro';
+    this.safetySettings = [];
+    for (const pair in Object.entries(safetySettings)) {
+      this.safetySettings.push({
+        category: <SafetyCategory>pair[0],
+        threshold: <BlockingThreshold>pair[1],
+      });
     }
-    this.url = `https://${gcp_region}-aiplatform.googleapis.com/v1/projects/${project_id}/locations/${gcp_region}/publishers/google/models/${model_name}:streamGenerateContent`;
-    this.modelParams = Object.assign(
-      { candidateCount: 1 },
-      Config.vertexAi.modelParams,
-      model_params
+
+    // set modelParams
+    type keyType = keyof typeof Config.vertexAi.modelParams;
+    const modelParams: Record<keyType, any> = Object.assign(
+      {},
+      Config.vertexAi.modelParams
     );
+    //  - overwrite modelParams from Configuration
+    for (const category of Object.keys(modelParams)) {
+      const value = ConfigReader.getValue('LLM_Params_' + category);
+      if (value) {
+        modelParams[<keyType>category] = value;
+      }
+    }
+    this.modelParams = Object.assign(modelParams, { candidateCount: 1 });
+
     this.logging = false;
   }
 
@@ -1089,6 +1126,7 @@ class GeminiVertexApi {
       throw new Error(`Uknown response from the API: ${JSON.stringify(res)}`);
     }
   }
+
   _parseResponse(res: any, prompt: string) {
     if (res.candidates) {
       if (res.candidates[0].content) {

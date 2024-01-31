@@ -15,26 +15,63 @@ import { Predictor } from './app';
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export const SETTINGS = {
-  CID: 'CID',
-  MCC: 'MCC',
-  ADS_DEV_TOKEN: 'ADS_DEV_TOKEN',
-  CLOUD_PROJECT_ID: 'CLOUD_PROJECT_ID',
-  CLOUD_PROJECT_REGION: 'CLOUD_PROJECT_REGION',
-  CUSTOMER_NAME: 'CUSTOMER_NAME',
-  LLM_temperature: 'LLM_temperature',
-  LLM_topK: 'LLM_topK',
-  LLM_topP: 'LLM_topP',
-  LLM_Prompt_Headlines: 'LLM_Prompt_Headlines',
-  LLM_Prompt_Headlines_Shorten: 'LLM_Prompt_Headlines_Shorten',
-  LLM_Prompt_Descriptions: 'LLM_Prompt_Descriptions',
-  ADSEDITOR_add_long_headlines: 'ADSEDITOR_add_long_headlines',
-  ADSEDITOR_add_long_descriptions: 'ADSEDITOR_add_long_descriptions',
-  ADSEDITOR_add_generic_headlines: 'ADSEDITOR_add_generic_headlines',
-  ADSEDITOR_add_generic_descriptions: 'ADSEDITOR_add_generic_descriptions',
-  LOGGING: 'LOGGING',
+interface Settings {
+  CID: string;
+  MCC: string;
+  CAMPAGIN: string;
+  ADS_DEV_TOKEN: string;
+  CLOUD_PROJECT_ID: string;
+  CLOUD_PROJECT_REGION: string;
+  CUSTOMER_NAME: string;
+  LLM_Name: string;
+  LLM_Params_temperature: string;
+  LLM_Params_topK: string;
+  LLM_Params_topP: string;
+  LLM_Prompt_Headlines: string;
+  LLM_Prompt_Headlines_Shorten: string;
+  LLM_Prompt_Descriptions: string;
+  ADSEDITOR_add_long_headlines: string;
+  ADSEDITOR_add_long_descriptions: string;
+  ADSEDITOR_add_generic_headlines: string;
+  ADSEDITOR_add_generic_descriptions: string;
+  LOGGING: string;
+}
+export const SETTINGS: Settings = {
+  CID: '',
+  MCC: '',
+  CAMPAGIN: '',
+  ADS_DEV_TOKEN: '',
+  CLOUD_PROJECT_ID: '',
+  CLOUD_PROJECT_REGION: '',
+  CUSTOMER_NAME: '',
+  LLM_Name: '',
+  LLM_Params_temperature: '',
+  LLM_Params_topK: '',
+  LLM_Params_topP: '',
+  LLM_Prompt_Headlines: '',
+  LLM_Prompt_Headlines_Shorten: '',
+  LLM_Prompt_Descriptions: '',
+  ADSEDITOR_add_long_headlines: '',
+  ADSEDITOR_add_long_descriptions: '',
+  ADSEDITOR_add_generic_headlines: '',
+  ADSEDITOR_add_generic_descriptions: '',
+  LOGGING: '',
 };
-
+for (const key of Object.keys(SETTINGS)) {
+  SETTINGS[<keyof Settings>key] = key;
+}
+export enum BlockingThreshold {
+  BLOCK_NONE = 'BLOCK_NONE',
+  BLOCK_ONLY_HIGH = 'BLOCK_ONLY_HIGH',
+  BLOCK_MEDIUM_AND_ABOVE = 'BLOCK_MEDIUM_AND_ABOVE',
+  BLOCK_LOW_AND_ABOVE = 'BLOCK_LOW_AND_ABOVE',
+}
+export enum SafetyCategory {
+  HARM_CATEGORY_SEXUALLY_EXPLICIT = 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+  HARM_CATEGORY_HATE_SPEECH = 'HARM_CATEGORY_HATE_SPEECH',
+  HARM_CATEGORY_HARASSMENT = 'HARM_CATEGORY_HARASSMENT',
+  HARM_CATEGORY_DANGEROUS_CONTENT = 'HARM_CATEGORY_DANGEROUS_CONTENT',
+}
 export const Config = {
   sheets: {
     Configuration: 'Configuration',
@@ -50,12 +87,19 @@ export const Config = {
     maxRetries: 3,
     quotaLimitDelay: 30 * 1000, // 30s
     modelName: 'gemini-pro',
-    // model default params (they are taken from Python official package (vertextai.language_models))
+    // model default params (see https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#request_body)
     modelParams: {
       temperature: undefined, // temperature: Controls the randomness of predictions. Range: [0, 1].
       maxOutputTokens: 8192, // Max length of the output text in tokens.
       topK: undefined, // The number of highest probability vocabulary tokens to keep for top-k-filtering.
       topP: undefined, // The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Range: [0, 1].
+    },
+    // model default sefety settings (see https://cloud.google.com/vertex-ai/docs/generative-ai/multimodal/configure-safety-attributes)
+    safetySettings: <Record<SafetyCategory, BlockingThreshold>>{
+      HARM_CATEGORY_SEXUALLY_EXPLICIT: 'BLOCK_NONE',
+      HARM_CATEGORY_HATE_SPEECH: 'BLOCK_NONE',
+      HARM_CATEGORY_HARASSMENT: 'BLOCK_NONE',
+      HARM_CATEGORY_DANGEROUS_CONTENT: 'BLOCK_NONE',
     },
     // https://cloud.google.com/vertex-ai/docs/generative-ai/learn/responsible-ai#limitations
     maxRequestLength: 8 * 1024,
@@ -119,6 +163,11 @@ export function reset_configuration() {
       'Google Ads customer id (MCC or leaf) to fetch data from',
     ],
     [SETTINGS.MCC, '', 'Google Ads MCC account id'],
+    [
+      SETTINGS.CAMPAGIN,
+      '',
+      'Google Ads campaign id (leave blank to fetch all campaigns)',
+    ],
     [SETTINGS.ADS_DEV_TOKEN, '', 'Google Ads developer token'],
     [
       SETTINGS.CLOUD_PROJECT_ID,
@@ -132,18 +181,18 @@ export function reset_configuration() {
     ],
     [SETTINGS.CUSTOMER_NAME, '', 'Customer name to substitute into prompts'],
     [
-      SETTINGS.LLM_temperature,
-      0.4,
+      SETTINGS.LLM_Params_temperature,
+      '',
       'The temperature is used for sampling during the response generation, which occurs when topP and topK are applied. Temperature controls the degree of randomness in token selection. Default: 0.9',
     ],
     [
-      SETTINGS.LLM_topK,
-      40,
+      SETTINGS.LLM_Params_topK,
+      '', // 40
       'Top-K changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. Default: none',
     ],
     [
-      SETTINGS.LLM_topP,
-      0.8,
+      SETTINGS.LLM_Params_topP,
+      '', // 0.8
       'Top-P changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. Default: 1.0',
     ],
     [
