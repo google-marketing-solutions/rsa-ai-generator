@@ -30,6 +30,10 @@ interface Settings {
   LLM_Prompt_Headlines: string;
   LLM_Prompt_Headlines_Shorten: string;
   LLM_Prompt_Descriptions: string;
+  LLM_SAFETY_HARM_CATEGORY_SEXUALLY_EXPLICIT: string;
+  LLM_SAFETY_HARM_CATEGORY_HATE_SPEECH: string;
+  LLM_SAFETY_HARM_CATEGORY_HARASSMENT: string;
+  LLM_SAFETY_HARM_CATEGORY_DANGEROUS_CONTENT: string;
   ADSEDITOR_add_long_headlines: string;
   ADSEDITOR_add_long_descriptions: string;
   ADSEDITOR_add_generic_headlines: string;
@@ -51,6 +55,10 @@ export const SETTINGS: Settings = {
   LLM_Prompt_Headlines: '',
   LLM_Prompt_Headlines_Shorten: '',
   LLM_Prompt_Descriptions: '',
+  LLM_SAFETY_HARM_CATEGORY_SEXUALLY_EXPLICIT: '',
+  LLM_SAFETY_HARM_CATEGORY_HATE_SPEECH: '',
+  LLM_SAFETY_HARM_CATEGORY_HARASSMENT: '',
+  LLM_SAFETY_HARM_CATEGORY_DANGEROUS_CONTENT: '',
   ADSEDITOR_add_long_headlines: '',
   ADSEDITOR_add_long_descriptions: '',
   ADSEDITOR_add_generic_headlines: '',
@@ -132,7 +140,7 @@ export class ConfigReader {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  static setValue(name: string, value: any) {
+  static setValue(name: string, value: any, description?: string) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
       Config.sheets.Configuration
     );
@@ -142,8 +150,16 @@ export class ConfigReader {
       const row = values[i];
       if (row[0].toLowerCase() === name.toLowerCase()) {
         sheet.getRange(i + 1, 2).setValue(value);
+        if (description) {
+          sheet.getRange(i + 1, 3).setValue(description);
+        }
+        return;
       }
     }
+    // we haven't found an existing row with the setting, so we'll add one
+    sheet
+      .getRange(sheet.getLastRow() + 1, 1, 1, 3)
+      .setValues([[name, value, description]]);
   }
 }
 
@@ -247,5 +263,28 @@ export function reveal_prompts() {
   ConfigReader.setValue(
     SETTINGS.LLM_Prompt_Descriptions,
     Predictor.DEFAULT_PROMPT_DESCRIPTIONS
+  );
+}
+
+export function reveal_safetySettings() {
+  ConfigReader.setValue(
+    SETTINGS.LLM_SAFETY_HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    BlockingThreshold.BLOCK_NONE,
+    `Use one of the values: ${BlockingThreshold.BLOCK_NONE}, ${BlockingThreshold.BLOCK_LOW_AND_ABOVE}, ${BlockingThreshold.BLOCK_MEDIUM_AND_ABOVE}, ${BlockingThreshold.BLOCK_ONLY_HIGH}`
+  );
+  ConfigReader.setValue(
+    SETTINGS.LLM_SAFETY_HARM_CATEGORY_HATE_SPEECH,
+    BlockingThreshold.BLOCK_NONE,
+    `Use one of the values: ${BlockingThreshold.BLOCK_NONE}, ${BlockingThreshold.BLOCK_LOW_AND_ABOVE}, ${BlockingThreshold.BLOCK_MEDIUM_AND_ABOVE}, ${BlockingThreshold.BLOCK_ONLY_HIGH}`
+  );
+  ConfigReader.setValue(
+    SETTINGS.LLM_SAFETY_HARM_CATEGORY_HARASSMENT,
+    BlockingThreshold.BLOCK_NONE,
+    `Use one of the values: ${BlockingThreshold.BLOCK_NONE}, ${BlockingThreshold.BLOCK_LOW_AND_ABOVE}, ${BlockingThreshold.BLOCK_MEDIUM_AND_ABOVE}, ${BlockingThreshold.BLOCK_ONLY_HIGH}`
+  );
+  ConfigReader.setValue(
+    SETTINGS.LLM_SAFETY_HARM_CATEGORY_DANGEROUS_CONTENT,
+    BlockingThreshold.BLOCK_NONE,
+    `Use one of the values: ${BlockingThreshold.BLOCK_NONE}, ${BlockingThreshold.BLOCK_LOW_AND_ABOVE}, ${BlockingThreshold.BLOCK_MEDIUM_AND_ABOVE}, ${BlockingThreshold.BLOCK_ONLY_HIGH}`
   );
 }

@@ -52,5 +52,9 @@ function onOpen(var_name: string) {
       name: 'Reveal prompts',
       functionName: var_name + '.reveal_prompts',
     },
+    {
+      name: 'Reveal safety settings',
+      functionName: var_name + '.reveal_safetySettings',
+    },
   ]);
 }

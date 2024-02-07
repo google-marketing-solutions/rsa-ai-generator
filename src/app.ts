@@ -731,7 +731,7 @@ Please generate 15 best selling creative headlines of maximum 25 symbols each fo
 {KEYWORDS}
 
 Please strictly limit each headline to 25 characters.
-Please reply in JSON format and return a JSON array with headlines as elements. Do not add any special symbols, e.g. emoji, to generated text`;
+Please reply in JSON format and return a JSON array with headlines as elements. Do not add any special symbols, e.g. emoji, in generated text`;
   //Return only a list of headlines, one per line, do not add any markup or any additional text.`
   static DEFAULT_PROMPT_HEADLINES_SHORTEN = `Some of the generated headlines are shorter or longer than the minimum ({MIN}) and the maximum ({MAX}) respectedly.
 Please rewrite them to be not shorter than {MIN} and not longer than {MAX}.
@@ -747,7 +747,7 @@ And the following headlines you previously created:
 
 Please strictly limit each description to 80 characters.
 Please reply in JSON format and return a JSON array with descriptions as elements.
-Do not add any special symbols, e.g. emoji, to generated text.`;
+Do not add any special symbols, e.g. emoji, in generated text.`;
 
   /**
    * @param {PalmApi} api
@@ -776,7 +776,7 @@ Do not add any special symbols, e.g. emoji, to generated text.`;
     reply = reply || '';
     let headlines = '';
     try {
-      reply = reply.replace(/```json/, '').replaceAll(/```/g, '');
+      reply = reply.replace(/```\w*json/, '').replaceAll(/```/g, '');
       const json_reply = JSON.parse(reply);
       headlines = json_reply.join('\n');
     } catch (e) {
@@ -1019,7 +1019,7 @@ class GeminiVertexApi {
       }
     }
     this.safetySettings = [];
-    for (const pair in Object.entries(safetySettings)) {
+    for (const pair of Object.entries(safetySettings)) {
       this.safetySettings.push({
         category: <SafetyCategory>pair[0],
         threshold: <BlockingThreshold>pair[1],
@@ -1056,31 +1056,9 @@ class GeminiVertexApi {
     });
     const data = {
       contents: history.slice(0, history.length),
-      safetySettings: [
-        {
-          category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-          threshold: 'BLOCK_LOW_AND_ABOVE',
-        },
-        {
-          category: 'HARM_CATEGORY_HATE_SPEECH',
-          threshold: 'BLOCK_LOW_AND_ABOVE',
-        },
-        {
-          category: 'HARM_CATEGORY_HARASSMENT',
-          threshold: 'BLOCK_LOW_AND_ABOVE',
-        },
-        {
-          category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-          threshold: 'BLOCK_LOW_AND_ABOVE',
-        },
-      ],
+      // see https://ai.google.dev/docs/safety_setting_gemini
+      safetySettings: this.safetySettings,
       generationConfig: this.modelParams,
-      // instances: [{
-      //   context: "",
-      //   examples: [],
-      //   messages: history.slice(0, history.length)
-      // }],
-      // parameters: this.modelParams,
     };
     if (this.logging) {
       Logger.log(`GeminiApi: sending payload: ${JSON.stringify(data)}`);
