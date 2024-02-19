@@ -198,6 +198,7 @@ export async function fetch_keywords() {
   const mccId = ConfigReader.getValue(SETTINGS.MCC);
   const seedCustomerId = ConfigReader.getValue(SETTINGS.CID) || mccId;
   const campaignId = ConfigReader.getValue(SETTINGS.CAMPAGIN);
+  const maxKeywords = ConfigReader.getValue(SETTINGS.MAX_KEYWORDS) || 20;
   if (!seedCustomerId) {
     SpreadsheetApp.getUi().alert(
       'Please specify a customer id in the CID and/or MCC fields on the Configuration sheet'
@@ -225,7 +226,7 @@ export async function fetch_keywords() {
   let headers;
   let startRow = 2;
   for (const cid of customerIds) {
-    const kws = getAllKeywords(client, cid, campaignId);
+    const kws = getAllKeywords(client, cid, campaignId, maxKeywords);
     if (!kws || kws.length === 0) {
       Logger.log(`No keywords for customer ${cid} were found`);
       continue;
@@ -276,7 +277,8 @@ function convertObjectsToArrays(arrayOfObjects: AdGroup[]) {
 function getAllKeywords(
   client: GoogleAdsClient,
   customerId: string,
-  campaignId?: string
+  campaignId?: string,
+  maxKeywords?: string
 ): AdGroup[] {
   let query_kw = `SELECT
     customer.id,
@@ -302,6 +304,7 @@ function getAllKeywords(
     query_kw += `\nAND campaign.id = ${campaignId}`;
     query_ads += `\nWHERE campaign.id = ${campaignId}`;
   }
+  query_kw += `\nORDER BY customer.id, campaign.id, ad_group.id, metrics.clicks DESC`;
   let adgroup_id;
   const adgroup_urls: Record<number, string[]> = {};
   Logger.log(`Fetching adgroups for CID=${customerId}, campaign=${campaignId}`);
@@ -342,7 +345,6 @@ function getAllKeywords(
         adgroup_id: row.adGroup.id,
         adgroup_name: row.adGroup.name,
         keywords_array: [row.adGroupCriterion.keyword.text],
-        //urls: adgroup_urls[row.adGroup.id],
         url: adgroup_urls[row.adGroup.id]
           ? adgroup_urls[row.adGroup.id][0]
           : '',
@@ -355,7 +357,12 @@ function getAllKeywords(
     }
     adgroup_id = row.adGroup.id;
   }
-
+  if (maxKeywords) {
+    const maxKeywordsNum = parseInt(maxKeywords);
+    for (const adgroup of results) {
+      adgroup.keywords_array!.splice(maxKeywordsNum);
+    }
+  }
   return results;
 }
 

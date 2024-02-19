@@ -19,6 +19,7 @@ interface Settings {
   CID: string;
   MCC: string;
   CAMPAGIN: string;
+  MAX_KEYWORDS: string;
   ADS_DEV_TOKEN: string;
   CLOUD_PROJECT_ID: string;
   CLOUD_PROJECT_REGION: string;
@@ -44,6 +45,7 @@ export const SETTINGS: Settings = {
   CID: '',
   MCC: '',
   CAMPAGIN: '',
+  MAX_KEYWORDS: '',
   ADS_DEV_TOKEN: '',
   CLOUD_PROJECT_ID: '',
   CLOUD_PROJECT_REGION: '',
