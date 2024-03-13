@@ -116,7 +116,7 @@ export const Config = {
   },
   // settings for Ads API
   adsApi: {
-    api_versions: 'v15',
+    api_versions: 'v16',
   },
   ads: {
     rsa_headline_max_length: 30,

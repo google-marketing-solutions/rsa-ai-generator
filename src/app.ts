@@ -78,6 +78,9 @@ function fetchJson(url: string, params: any, retryNum?: number) {
   //     `Request to ${this.url}\n: ${JSON.stringify(request)}`
   //   );
   // }
+  // NOTE: UrlFetchApp has a limit for response size of 50MB per call
+  //  https://developers.google.com/apps-script/guides/services/quotas#current_limitations
+  // (52428800)
   const response = UrlFetchApp.fetch(url, params);
   const code = response.getResponseCode();
   if (code === 429) {
@@ -91,7 +94,9 @@ function fetchJson(url: string, params: any, retryNum?: number) {
   }
   const response_text = response.getContentText();
   // TODO: check 'logging' setting
-  Logger.log('Code: ' + code + '\nResponse:\n' + response_text);
+  Logger.log(
+    `Code: ${code}\nResponse: (length=${response_text.length})\n ${response_text}`
+  );
   if (code === 403) {
     const error_msg = getErrorFromResponse(response_text);
     throw new Error(`Permission denined` + error_msg ? ': ' + error_msg : '');
@@ -113,7 +118,16 @@ function fetchJson(url: string, params: any, retryNum?: number) {
       error_msg || `API call has failed (url: ${url}) with code ${code}`;
     throw new Error(error_msg);
   }
-  return JSON.parse(response_text);
+  try {
+    return JSON.parse(response_text);
+  } catch (e) {
+    if (response_text.length >= 50 * 1024 * 1024) {
+      throw new Error(
+        `API response is too large (${response_text.length}) and was truncated, as so it could not be passed. Please contact the developers. Original error: ${e}`
+      );
+    }
+    throw new Error(`An error ocurred on API response parsing: ${e}`);
+  }
 }
 
 export interface GoogleAdsClientOptions {
@@ -299,10 +313,13 @@ function getAllKeywords(
   let query_ads = `SELECT
     ad_group.id,
     ad_group_ad.ad.final_urls
-  FROM ad_group_ad`;
+  FROM ad_group_ad
+  WHERE ad_group.type = SEARCH_STANDARD
+    AND campaign.status = ENABLED
+  `;
   if (campaignId) {
     query_kw += `\nAND campaign.id = ${campaignId}`;
-    query_ads += `\nWHERE campaign.id = ${campaignId}`;
+    query_ads += `\nAND campaign.id = ${campaignId}`;
   }
   query_kw += `\nORDER BY customer.id, campaign.id, ad_group.id, metrics.clicks DESC`;
   let adgroup_id;
