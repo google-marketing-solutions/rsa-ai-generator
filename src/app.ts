@@ -81,7 +81,15 @@ function fetchJson(url: string, params: any, retryNum?: number) {
   // NOTE: UrlFetchApp has a limit for response size of 50MB per call
   //  https://developers.google.com/apps-script/guides/services/quotas#current_limitations
   // (52428800)
-  const response = UrlFetchApp.fetch(url, params);
+  const request = Object.assign({}, params);
+  if (
+    params.method?.toLocaleUpperCase() === 'POST' &&
+    params.payload &&
+    typeof params.payload !== 'string'
+  ) {
+    request.payload = JSON.stringify(params.payload);
+  }
+  const response = UrlFetchApp.fetch(url, request);
   const code = response.getResponseCode();
   if (code === 429) {
     Logger.log(
@@ -175,8 +183,7 @@ export class GoogleAdsClient {
   execQuery(query: string, customerId: string): any[] {
     Logger.log(`Executing GAQL query: ${query}`);
     const OAUTH_TOKEN = ScriptApp.getOAuthToken();
-    const url =
-      this.endpoint + `customers/${customerId}/googleAds:searchStream`;
+    const url = `${this.endpoint}customers/${customerId}/googleAds:search`;
     const request: any = {
       method: 'POST',
       headers: {
@@ -185,26 +192,41 @@ export class GoogleAdsClient {
         'Content-Type': 'application/json',
       },
       contentType: 'application/json',
-      payload: JSON.stringify({
+      payload: {
+        //NOTE: by default pageSize=10000, might be configurable in the future
         query: query,
-      }),
+      },
       muteHttpExceptions: true, // Set to true for full exceptions in logs
     };
     if (this.mccId) {
       request.headers['login-customer-id'] = this.mccId;
     }
-    const res_json = fetchJson(url, request);
-    // var response = UrlFetchApp.fetch(url, request);
-    // Logger.log(response.getContentText());
-    // const res_json = JSON.parse(response.getContentText());
-    const data = res_json && res_json.length ? res_json[0] : null;
-    if (data && data.error) {
-      throw new Error(data.error.message);
-    }
-    if (!res_json.length) {
-      Logger.log(`WARNING: empty response recieved for cid=${customerId}`);
-    }
-    return res_json && res_json.length ? res_json[0].results : [];
+    let results;
+    do {
+      const res_json = fetchJson(url, request);
+      const data = res_json && res_json.length ? res_json[0] : res_json;
+      if (!data) {
+        Logger.log(`WARNING: empty response recieved for cid=${customerId}`);
+      }
+      if (data && data.error) {
+        throw new Error(data.error.message);
+      }
+      if (data && data.results) {
+        if (!results) {
+          results = data.results;
+        } else {
+          results = results.concat(data.results);
+        }
+      }
+      if (data && data.nextPageToken) {
+        request.payload.pageToken = data.nextPageToken;
+        continue;
+      }
+      break;
+      // eslint-disable-next-line no-constant-condition
+    } while (true);
+
+    return results || [];
   }
 }
 
@@ -322,11 +344,14 @@ function getAllKeywords(
     query_ads += `\nAND campaign.id = ${campaignId}`;
   }
   query_kw += `\nORDER BY customer.id, campaign.id, ad_group.id, metrics.clicks DESC`;
-  let adgroup_id;
-  const adgroup_urls: Record<number, string[]> = {};
-  Logger.log(`Fetching adgroups for CID=${customerId}, campaign=${campaignId}`);
+  query_ads += `\nORDER BY ad_group.id`;
+  Logger.log(
+    `Fetching ad_group_ad for CID=${customerId}, campaign=${campaignId}`
+  );
   const rows_ads = client.execQuery(query_ads, customerId);
 
+  const adgroup_urls: Record<number, string[]> = {};
+  let adgroup_id;
   if (rows_ads && rows_ads.length) {
     for (const row of rows_ads) {
       const urls = row.adGroupAd.ad.finalUrls;
@@ -334,6 +359,9 @@ function getAllKeywords(
         if (row.adGroup.id !== adgroup_id) {
           adgroup_urls[row.adGroup.id] = urls;
         } else {
+          if (!adgroup_urls[row.adGroup.id]) {
+            adgroup_urls[row.adGroup.id] = [];
+          }
           adgroup_urls[row.adGroup.id].push(...urls);
         }
       }
@@ -378,6 +406,11 @@ function getAllKeywords(
     const maxKeywordsNum = parseInt(maxKeywords);
     for (const adgroup of results) {
       adgroup.keywords_array!.splice(maxKeywordsNum);
+      // sometime people add "+" to keywords, remove them
+      for (let i = 0; i < adgroup.keywords_array!.length; i++) {
+        const kw = adgroup.keywords_array![i].replaceAll('+', '');
+        adgroup.keywords_array![i] = kw;
+      }
     }
   }
   return results;
@@ -1094,7 +1127,7 @@ class GeminiVertexApi {
         'Content-Type': 'application/json',
         'authorization': `Bearer ${ScriptApp.getOAuthToken()}`,
       },
-      payload: JSON.stringify(data),
+      payload: data,
       muteHttpExceptions: true,
     };
 
