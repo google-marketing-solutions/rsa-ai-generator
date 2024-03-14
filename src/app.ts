@@ -327,6 +327,7 @@ function getAllKeywords(
     metrics.clicks
   FROM keyword_view
   WHERE ad_group.type = SEARCH_STANDARD
+    AND ad_group.status = ENABLED
     AND campaign.status = ENABLED
     AND ad_group_criterion.status = ENABLED
     AND metrics.clicks > 0
@@ -337,6 +338,7 @@ function getAllKeywords(
     ad_group_ad.ad.final_urls
   FROM ad_group_ad
   WHERE ad_group.type = SEARCH_STANDARD
+    AND ad_group.status = ENABLED
     AND campaign.status = ENABLED
   `;
   if (campaignId) {
@@ -833,7 +835,7 @@ Do not add any special symbols, e.g. emoji, in generated text.`;
     reply = reply || '';
     let headlines = '';
     try {
-      reply = reply.replace(/```\w*json/, '').replaceAll(/```/g, '');
+      reply = reply.replace(/```\w*(json|JSON)/, '').replaceAll(/```/g, '');
       const json_reply = JSON.parse(reply);
       headlines = json_reply.join('\n');
     } catch (e) {
