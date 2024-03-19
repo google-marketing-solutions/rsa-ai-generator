@@ -201,17 +201,17 @@ export function reset_configuration() {
     [
       SETTINGS.LLM_Params_temperature,
       '',
-      'The temperature is used for sampling during the response generation, which occurs when topP and topK are applied. Temperature controls the degree of randomness in token selection. Default: 0.9',
+      'The temperature is used for sampling during the response generation, which occurs when topP and topK are applied. Temperature controls the degree of randomness in token selection. Default: 0.9. See details on https://ai.google.dev/docs/concepts#model-parameters',
     ],
     [
       SETTINGS.LLM_Params_topK,
       '', // 40
-      'Top-K changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. Default: none',
+      'Top-K changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. Default: none. See details on https://ai.google.dev/docs/concepts#model-parameters',
     ],
     [
       SETTINGS.LLM_Params_topP,
       '', // 0.8
-      'Top-P changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. Default: 1.0',
+      'Top-P changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. Default: 1.0. See details on https://ai.google.dev/docs/concepts#model-parameters',
     ],
     [
       SETTINGS.LLM_Prompt_Headlines,

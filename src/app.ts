@@ -53,8 +53,8 @@ function getErrorFromResponse(response_text: string) {
       }
       ]
      */
-    const data = res_json && res_json.length ? res_json[0] : null;
-    if (data.error) {
+    const data = res_json && res_json.length ? res_json[0] : res_json;
+    if (data && data.error) {
       error_msg = data.error.message;
       if (data.error.details && data.error.details.length) {
         error_msg =
@@ -63,6 +63,10 @@ function getErrorFromResponse(response_text: string) {
     }
   } catch {
     // skip
+    Logger.log(
+      'Failed to parse error from http response, original raw response: ' +
+        response_text
+    );
   }
   return error_msg;
 }
@@ -107,7 +111,7 @@ function fetchJson(url: string, params: any, retryNum?: number) {
   );
   if (code === 403) {
     const error_msg = getErrorFromResponse(response_text);
-    throw new Error(`Permission denined` + error_msg ? ': ' + error_msg : '');
+    throw new Error(`Permission denined` + (error_msg ? ': ' + error_msg : ''));
   }
   if (code === 502 || code === 504 || code === 504) {
     // 502 - Bad Gateway
@@ -793,9 +797,9 @@ Please strictly limit each headline to 25 characters.
 Please reply in JSON format and return a JSON array with headlines as elements. Do not add any special symbols, e.g. emoji, in generated text`;
   //Return only a list of headlines, one per line, do not add any markup or any additional text.`
   static DEFAULT_PROMPT_HEADLINES_SHORTEN = `Some of the generated headlines are shorter or longer than the minimum ({MIN}) and the maximum ({MAX}) respectedly.
-Please rewrite them to be not shorter than {MIN} and not longer than {MAX}.
+Please rewrite the following headlines to be not shorter than {MIN} and not longer than {MAX}. Only rewrite the specified hedlines in this message, do not add the previous ones.
 Please reply in JSON format and return a JSON array with headlines as elements.
-Again do not add anything to your generated text. The headlines to normalize are:\n\n{HEADLINES}`;
+Again do not add anything to your generated text. The headlines to rewrite are:\n\n{HEADLINES}`;
   static DEFAULT_PROMPT_DESCRIPTIONS = `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
 Please generate 4 best selling creative descriptions of maximum 80 characters each for a Google Ads search campaign (RSA) using the following keywords as an input (each keyword is on a separate line):
 
