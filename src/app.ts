@@ -25,10 +25,10 @@ import {
 
 export const app = null;
 
-function getErrorFromResponse(response_text: string) {
-  let error_msg = '';
+function getErrorFromResponse(responseText: string) {
+  let errorMsg = '';
   try {
-    const res_json = JSON.parse(response_text);
+    const resJson = JSON.parse(responseText);
     /* Example:
       [{
         "error": {
@@ -53,25 +53,24 @@ function getErrorFromResponse(response_text: string) {
       }
       ]
      */
-    const data = res_json && res_json.length ? res_json[0] : res_json;
+    const data = resJson && resJson.length ? resJson[0] : resJson;
     if (data && data.error) {
-      error_msg = data.error.message;
+      errorMsg = data.error.message;
       if (data.error.details && data.error.details.length) {
-        error_msg =
-          error_msg + '. ' + data.error.details[0].errors?.[0]?.message;
+        errorMsg = errorMsg + '. ' + data.error.details[0].errors?.[0]?.message;
       }
     }
   } catch {
     // skip
     Logger.log(
       'Failed to parse error from http response, original raw response: ' +
-        response_text
+        responseText
     );
   }
-  return error_msg;
+  return errorMsg;
 }
 
-function fetchJson(url: string, params: any, retryNum?: number) {
+function fetchJson(url: string, params: any, retryNum?: number): any {
   if (!retryNum) retryNum = 0;
   if (!params.contentType) {
     params.contentType = 'application/json';
@@ -207,8 +206,8 @@ export class GoogleAdsClient {
     }
     let results;
     do {
-      const res_json = fetchJson(url, request);
-      const data = res_json && res_json.length ? res_json[0] : res_json;
+      const resJson = fetchJson(url, request);
+      const data = resJson && resJson.length ? resJson[0] : resJson;
       if (!data) {
         Logger.log(`WARNING: empty response recieved for cid=${customerId}`);
       }
@@ -320,7 +319,7 @@ function getAllKeywords(
   campaignId?: string,
   maxKeywords?: string
 ): AdGroup[] {
-  let query_kw = `SELECT
+  let queryKw = `SELECT
     customer.id,
     customer.descriptive_name,
     campaign.id,
@@ -337,7 +336,7 @@ function getAllKeywords(
     AND metrics.clicks > 0
   `;
 
-  let query_ads = `SELECT
+  let queryAds = `SELECT
     ad_group.id,
     ad_group_ad.ad.final_urls
   FROM ad_group_ad
@@ -346,47 +345,47 @@ function getAllKeywords(
     AND campaign.status = ENABLED
   `;
   if (campaignId) {
-    query_kw += `\nAND campaign.id = ${campaignId}`;
-    query_ads += `\nAND campaign.id = ${campaignId}`;
+    queryKw += `\nAND campaign.id = ${campaignId}`;
+    queryAds += `\nAND campaign.id = ${campaignId}`;
   }
-  query_kw += `\nORDER BY customer.id, campaign.id, ad_group.id, metrics.clicks DESC`;
-  query_ads += `\nORDER BY ad_group.id`;
+  queryKw += `\nORDER BY customer.id, campaign.id, ad_group.id, metrics.clicks DESC`;
+  queryAds += `\nORDER BY ad_group.id`;
   Logger.log(
     `Fetching ad_group_ad for CID=${customerId}, campaign=${campaignId}`
   );
-  const rows_ads = client.execQuery(query_ads, customerId);
+  const rowsAds = client.execQuery(queryAds, customerId);
 
-  const adgroup_urls: Record<number, string[]> = {};
-  let adgroup_id;
-  if (rows_ads && rows_ads.length) {
-    for (const row of rows_ads) {
+  const adgroupUrls: Record<number, string[]> = {};
+  let adgroupId;
+  if (rowsAds && rowsAds.length) {
+    for (const row of rowsAds) {
       const urls = row.adGroupAd.ad.finalUrls;
       if (urls && urls.length) {
-        if (row.adGroup.id !== adgroup_id) {
-          adgroup_urls[row.adGroup.id] = urls;
+        if (row.adGroup.id !== adgroupId) {
+          adgroupUrls[row.adGroup.id] = urls;
         } else {
-          if (!adgroup_urls[row.adGroup.id]) {
-            adgroup_urls[row.adGroup.id] = [];
+          if (!adgroupUrls[row.adGroup.id]) {
+            adgroupUrls[row.adGroup.id] = [];
           }
-          adgroup_urls[row.adGroup.id].push(...urls);
+          adgroupUrls[row.adGroup.id].push(...urls);
         }
       }
-      adgroup_id = row.adGroup.id;
+      adgroupId = row.adGroup.id;
     }
   }
 
   Logger.log(`Fetching keywords for CID=${customerId}, campaign=${campaignId}`);
-  const rows = client.execQuery(query_kw, customerId);
+  const rows = client.execQuery(queryKw, customerId);
   if (!rows || !rows.length) {
     return [];
   }
 
-  adgroup_id = undefined;
+  adgroupId = undefined;
   const results: AdGroup[] = [];
   let current: AdGroup | undefined = undefined;
   for (const row of rows) {
     // we'll group keywords by adgroup
-    if (row.adGroup.id !== adgroup_id) {
+    if (row.adGroup.id !== adgroupId) {
       // current adgroup has changed (including the case of the first row)
       current = {
         customer_id: row.customer.id,
@@ -396,9 +395,7 @@ function getAllKeywords(
         adgroup_id: row.adGroup.id,
         adgroup_name: row.adGroup.name,
         keywords_array: [row.adGroupCriterion.keyword.text],
-        url: adgroup_urls[row.adGroup.id]
-          ? adgroup_urls[row.adGroup.id][0]
-          : '',
+        url: adgroupUrls[row.adGroup.id] ? adgroupUrls[row.adGroup.id][0] : '',
         ignore: false,
       };
       results.push(current);
@@ -406,7 +403,7 @@ function getAllKeywords(
       // same adgroup as before
       current!.keywords_array!.push(row.adGroupCriterion.keyword.text);
     }
-    adgroup_id = row.adGroup.id;
+    adgroupId = row.adGroup.id;
   }
   if (maxKeywords) {
     const maxKeywordsNum = parseInt(maxKeywords);
@@ -456,8 +453,8 @@ interface AdGroup {
  * Goes through all keywords (they should be fetched first via fetch_keywords) and generates headlines via PaLM API.
  */
 export function generate_rsa(rowToProcess?: number) {
-  const project_id = ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_ID);
-  if (!project_id) {
+  const projectId = ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_ID);
+  if (!projectId) {
     SpreadsheetApp.getUi().alert(
       'Please provide a GCP project id on the Configuration sheet (you should also enable Vertex API in that proejct)'
     );
@@ -480,7 +477,7 @@ export function generate_rsa(rowToProcess?: number) {
     return;
   }
 
-  const api = new GeminiVertexApi(project_id);
+  const api = new GeminiVertexApi(projectId);
   api.logging =
     ConfigReader.getValue(SETTINGS.LOGGING).toString().toLocaleUpperCase() ===
     'TRUE';
@@ -541,35 +538,35 @@ export function generate_rsa(rowToProcess?: number) {
       continue;
     }
 
-    const gen_res = predictor.getHeadlines(adGroup);
+    const genRes = predictor.getHeadlines(adGroup);
 
-    adGroup.headlines = gen_res.headlines.join('\n');
+    adGroup.headlines = genRes.headlines.join('\n');
     adGroup.all_headlines = [
-      ...gen_res.headlines,
-      ...(gen_res.long_headlines || []),
+      ...genRes.headlines,
+      ...(genRes.longHeadlines || []),
     ];
-    const all_headlines = [];
-    let all_headlines_text = '';
-    all_headlines.push(...gen_res.headlines);
-    if (gen_res.long_headlines.length) {
+    const allHeadlines = [];
+    let allHeadlinesText = '';
+    allHeadlines.push(...genRes.headlines);
+    if (genRes.longHeadlines.length) {
       const MAX = Config.ads.rsa_headline_max_length;
-      all_headlines.push('\nHeadlines longer than ' + MAX + ':');
-      all_headlines.push(...gen_res.long_headlines);
-      all_headlines_text = all_headlines.join('\n');
+      allHeadlines.push('\nHeadlines longer than ' + MAX + ':');
+      allHeadlines.push(...genRes.longHeadlines);
+      allHeadlinesText = allHeadlines.join('\n');
     } else {
-      all_headlines_text = adGroup.headlines;
+      allHeadlinesText = adGroup.headlines;
     }
-    if (all_headlines_text) {
+    if (allHeadlinesText) {
       Logger.log(
-        `[AdGroup ${adGroup.adgroup_id}]: generated headlines: ${all_headlines_text}`
+        `[AdGroup ${adGroup.adgroup_id}]: generated headlines: ${allHeadlinesText}`
       );
     } else {
       Logger.log(
         `WARNING: no headlines were generated for ${adGroup.adgroup_id} (${adGroup.adgroup_name})`
       );
     }
-    sheet.getRange(rowNo, COL_Headlines).setValue(all_headlines_text);
-    if (all_headlines_text) {
+    sheet.getRange(rowNo, COL_Headlines).setValue(allHeadlinesText);
+    if (allHeadlinesText) {
       adGroup.descriptions = predictor.getDescriptions(adGroup);
       sheet.getRange(rowNo, COL_Descriptions).setValue(adGroup.descriptions);
       if (!adGroup.descriptions) {
@@ -659,31 +656,31 @@ export function generate_ads_editor() {
     .getRange(2, 1, sheetSrc.getLastRow() - 1, 11)
     .getValues();
 
-  const add_long_headlines =
+  const addLongHeadlines =
     ConfigReader.getValue(SETTINGS.ADSEDITOR_add_long_headlines)
       .toString()
       .toLocaleUpperCase() === 'TRUE';
-  const add_long_descriptions =
+  const addLongDescriptions =
     ConfigReader.getValue(SETTINGS.ADSEDITOR_add_long_descriptions)
       .toString()
       .toLocaleUpperCase() === 'TRUE';
-  const add_generic_headlines = ConfigReader.getValue(
+  const addGenericHeadlines = ConfigReader.getValue(
     SETTINGS.ADSEDITOR_add_generic_headlines
   );
-  const add_generic_descriptions = ConfigReader.getValue(
+  const addGenericDescriptions = ConfigReader.getValue(
     SETTINGS.ADSEDITOR_add_generic_descriptions
   );
   let genericHeadlines;
   let genericDescriptions;
-  if (add_generic_headlines) {
+  if (addGenericHeadlines) {
     genericHeadlines = SpreadsheetApp.getActiveSpreadsheet()
-      .getRange(add_generic_headlines)
+      .getRange(addGenericHeadlines)
       .getValues()
       .map(row => row[0]);
   }
-  if (add_generic_descriptions) {
+  if (addGenericDescriptions) {
     genericDescriptions = SpreadsheetApp.getActiveSpreadsheet()
-      .getRange(add_generic_descriptions)
+      .getRange(addGenericDescriptions)
       .getValues()
       .map(row => row[0]);
   }
@@ -714,58 +711,58 @@ export function generate_ads_editor() {
     ];
     rows.push(row);
     // add headlines
-    const headlines_dst = [];
+    const headlinesDst = [];
     for (let j = 0; j < headlines_src.length; j++) {
       const hl = headlines_src[j].trim();
       if (!hl) continue;
       if (hl.includes('Headlines longer')) continue;
-      if (hl.length > Config.ads.rsa_headline_max_length && !add_long_headlines)
+      if (hl.length > Config.ads.rsa_headline_max_length && !addLongHeadlines)
         continue;
-      headlines_dst.push(hl);
-      if (headlines_dst.length === 15) break;
+      headlinesDst.push(hl);
+      if (headlinesDst.length === 15) break;
     }
-    if (headlines_dst.length < 15 && genericHeadlines) {
-      const add = 15 - headlines_dst.length;
+    if (headlinesDst.length < 15 && genericHeadlines) {
+      const add = 15 - headlinesDst.length;
       for (let j = 0; j < add; j++) {
-        headlines_dst.push(genericHeadlines[j]);
+        headlinesDst.push(genericHeadlines[j]);
       }
     }
     // add final headlines to the row
-    for (let j = 0; j < headlines_dst.length; j++) {
-      row.push(headlines_dst[j]);
+    for (let j = 0; j < headlinesDst.length; j++) {
+      row.push(headlinesDst[j]);
       row.push('');
     }
-    for (let j = headlines_dst.length; j < 15; j++) {
+    for (let j = headlinesDst.length; j < 15; j++) {
       row.push('');
       row.push('');
     }
 
     // add descriptions
-    const descriptions_dst = [];
+    const descriptionsDst = [];
     for (let j = 0; j < descriptions_src.length; j++) {
       const desc = descriptions_src[j].trim();
       if (!desc) continue;
       if (desc.includes('Descriptions longer')) continue;
       if (
         desc.length > Config.ads.rsa_description_max_length &&
-        !add_long_descriptions
+        !addLongDescriptions
       )
         continue;
-      descriptions_dst.push(desc);
-      if (descriptions_dst.length === 4) break;
+      descriptionsDst.push(desc);
+      if (descriptionsDst.length === 4) break;
     }
-    if (descriptions_dst.length < 4 && genericDescriptions) {
-      const add = 4 - descriptions_dst.length;
+    if (descriptionsDst.length < 4 && genericDescriptions) {
+      const add = 4 - descriptionsDst.length;
       for (let j = 0; j < add; j++) {
-        descriptions_dst.push(genericDescriptions[j]);
+        descriptionsDst.push(genericDescriptions[j]);
       }
     }
     // add final descriptions to the row
-    for (let j = 0; j < descriptions_dst.length; j++) {
-      row.push(descriptions_dst[j]);
+    for (let j = 0; j < descriptionsDst.length; j++) {
+      row.push(descriptionsDst[j]);
       row.push('');
     }
-    for (let j = descriptions_dst.length; j < 4; j++) {
+    for (let j = descriptionsDst.length; j < 4; j++) {
       row.push('');
       row.push('');
     }
@@ -840,8 +837,8 @@ Do not add any special symbols, e.g. emoji, in generated text.`;
     let headlines = '';
     try {
       reply = reply.replace(/```\w*(json|JSON)/, '').replaceAll(/```/g, '');
-      const json_reply = JSON.parse(reply);
-      headlines = json_reply.join('\n');
+      const jsonReply = JSON.parse(reply);
+      headlines = jsonReply.join('\n');
     } catch (e) {
       Logger.log(
         `WARNING: failed to parse response as JSON: ${e}, falling back to text`
@@ -873,10 +870,10 @@ Do not add any special symbols, e.g. emoji, in generated text.`;
    */
   getHeadlines(adgroup: AdGroup): {
     headlines: string[];
-    long_headlines: string[];
+    longHeadlines: string[];
   } {
     let prompt = this.getHeadlinesPrompt(adgroup);
-    //Logger.log(`Sending a prompt (headlines): ${prompt}`);
+    Logger.log(`Sending a prompt (headlines): ${prompt}`);
 
     let reply = this.api.predict(prompt, this.history);
     reply = this.normalizeReply(reply);
@@ -888,50 +885,50 @@ Do not add any special symbols, e.g. emoji, in generated text.`;
     }
     const MAX = Config.ads.rsa_headline_max_length;
     const MIN = Config.ads.rsa_headline_min_length;
-    const org_headlines_arr = reply ? reply.split('\n') : [];
-    let long_lines = org_headlines_arr.filter(
+    const orgHeadlinesArr = reply ? reply.split('\n') : [];
+    let longLines = orgHeadlinesArr.filter(
       line => line.length > MAX || line.length < MIN
     );
-    const headlines = org_headlines_arr.filter(
+    const headlines = orgHeadlinesArr.filter(
       line => line.length <= MAX && line.length >= MIN
     );
-    if (long_lines.length > 0) {
+    if (longLines.length > 0) {
       Logger.log(
-        `Model's response contains too long or too short headlines (${long_lines.length} of ${org_headlines_arr.length}), trying to rewrite`
+        `Model's response contains too long or too short headlines (${longLines.length} of ${orgHeadlinesArr.length}), trying to rewrite`
       );
       // 2nd attempt
-      prompt = this.getHeadlines2ndPrompt(adgroup, long_lines);
+      prompt = this.getHeadlines2ndPrompt(adgroup, longLines);
       Logger.log(`Sending 2nd prompt: ${prompt}`);
       reply = this.api.predict(prompt, this.history);
       reply = this.normalizeReply(reply);
       Logger.log(
         `[AdGroup ${adgroup.adgroup_id}] Model's 2nd reply (normalized): ${reply}`
       );
-      const long_lines2 = reply
+      const longLines2 = reply
         ? reply
             .split('\n')
             .filter(line => line.length > MAX || line.length < MIN)
         : [];
-      if (long_lines2.length) {
-        long_lines = long_lines2;
+      if (longLines2.length) {
+        longLines = longLines2;
       }
-      const new_headlines = reply
+      const newHeadlines = reply
         ? reply
             .split('\n')
             .filter(line => line.length <= MAX && line.length >= MIN)
         : [];
-      headlines.push(...new_headlines);
+      headlines.push(...newHeadlines);
 
-      if (long_lines2.length) {
+      if (longLines2.length) {
         Logger.log(
-          `WARNING: Model's response again (after 2nd prompt) contains too long/short headlines (${long_lines2.length}):`
+          `WARNING: Model's response again (after 2nd prompt) contains too long/short headlines (${longLines2.length}):`
         );
-        Logger.log(long_lines2);
+        Logger.log(longLines2);
       }
     }
     const result = {
       headlines: headlines, // good ones
-      long_headlines: long_lines,
+      longHeadlines: longLines,
     };
 
     return result;
@@ -994,9 +991,9 @@ Do not add any special symbols, e.g. emoji, in generated text.`;
    */
   getHeadlines2ndPrompt(adgroup: AdGroup, long_lines: string[]) {
     const promptTemplate = this.promptHeadlinesShortenTemplate;
-    const long_headlines = long_lines.map(line => '* ' + line).join('\n');
+    const longHeadlines = long_lines.map(line => '* ' + line).join('\n');
     return this._getPrompt(promptTemplate, undefined, {
-      HEADLINES: long_headlines,
+      HEADLINES: longHeadlines,
       MIN: Config.ads.rsa_headline_min_length,
       MAX: Config.ads.rsa_headline_max_length,
     });
@@ -1031,8 +1028,8 @@ Do not add any special symbols, e.g. emoji, in generated text.`;
       }
       return prompt;
     }
-    const keywords_arr = keywords.split('\n');
-    let itemNum = keywords_arr.length;
+    const keywordsArr = keywords.split('\n');
+    let itemNum = keywordsArr.length;
 
     // we have to limit length of input
     do {
@@ -1045,8 +1042,8 @@ Do not add any special symbols, e.g. emoji, in generated text.`;
         break;
       }
       // remove the last keyword and repeat
-      keywords = keywords_arr.slice(0, itemNum - 1).join('\n');
-      if (itemNum < keywords_arr.length - 1) {
+      keywords = keywordsArr.slice(0, itemNum - 1).join('\n');
+      if (itemNum < keywordsArr.length - 1) {
         Logger.log(`request is too long (${prompt.length}), shortening`);
       }
     } while (prompt.length >= Config.vertexAi.maxRequestLength);
@@ -1055,15 +1052,15 @@ Do not add any special symbols, e.g. emoji, in generated text.`;
 }
 
 class GeminiVertexApi {
-  project_id: string;
+  projectId: string;
   url: string;
   modelParams: any;
   logging: boolean;
   safetySettings: { category: SafetyCategory; threshold: BlockingThreshold }[];
 
-  constructor(project_id: string) {
-    this.project_id = project_id;
-    const gcp_region =
+  constructor(projectId: string) {
+    this.projectId = projectId;
+    const gcpRegion =
       ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_REGION) ||
       Config.vertexAi.location ||
       'us-central1';
@@ -1071,7 +1068,7 @@ class GeminiVertexApi {
       ConfigReader.getValue(SETTINGS.LLM_Name) ||
       Config.vertexAi.modelName ||
       'gemini-pro';
-    this.url = `https://${gcp_region}-aiplatform.googleapis.com/v1/projects/${project_id}/locations/${gcp_region}/publishers/google/models/${modelName}:streamGenerateContent`;
+    this.url = `https://${gcpRegion}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${gcpRegion}/publishers/google/models/${modelName}:streamGenerateContent`;
 
     const safetySettings = Object.assign({}, Config.vertexAi.safetySettings);
     for (const category of Object.keys(Config.vertexAi.safetySettings)) {
@@ -1141,8 +1138,8 @@ class GeminiVertexApi {
     if (res.length) {
       // streamGenerateContent returns an array of response that should be merged into one
       let reply = '';
-      for (const res_item of res) {
-        const text = this._parseResponse(res_item, prompt);
+      for (const resItem of res) {
+        const text = this._parseResponse(resItem, prompt);
         if (text) {
           reply += text;
         }
@@ -1190,130 +1187,3 @@ class GeminiVertexApi {
     return '';
   }
 }
-
-/*
-class PalmChatApi {
-  constructor(project_id, gcp_region, model_name, model_params) {
-    this.project_id = project_id;
-    if (!gcp_region) {
-      gcp_region = Config.vertexAi.location;
-    }
-    if (!model_name) {
-      model_name = Config.vertexAi.modelName;
-    }
-    this.url = `https://${gcp_region}-aiplatform.googleapis.com/v1/projects/${project_id}/locations/${gcp_region}/publishers/google/models/${model_name}:predict`;
-    this.modelParams = Object.assign(
-      {},
-      Config.vertexAi.modelParams,
-      model_params
-    );
-    this.logging = false;
-  }
-
-  predict(prompt, history) {
-    history = history || [];
-    history.push({
-      author: 'user',
-      content: prompt,
-    });
-    const data = {
-      instances: [
-        {
-          context: '',
-          examples: [],
-          messages: history.slice(0, history.length),
-        },
-      ],
-      parameters: this.modelParams,
-    };
-    if (this.logging) {
-      Logger.log(`PalmChatApi: sending payload: ${JSON.stringify(data)}`);
-    }
-
-    const request = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'authorization': `Bearer ${ScriptApp.getOAuthToken()}`,
-      },
-      payload: JSON.stringify(data),
-      muteHttpExceptions: true,
-    };
-    const res = fetchJson(this.url, request);
-    if (this.logging) {
-      Logger.log(`PalmChatApi: recieved response: ${JSON.stringify(res)}`);
-    }
-    if (res.predictions) {
-      if (res.predictions[0].safetyAttributes.blocked) {
-        throw new Error(
-          `Request was blocked as it triggered API safety filters. Prompt: ${prompt}`
-        );
-      } else if (
-        !res.predictions[0].candidates ||
-        !res.predictions[0].candidates.length ||
-        !res.predictions[0].candidates[0].content
-      ) {
-        throw new Error(`Received empty response from API. Prompt: ${prompt}`);
-      } else {
-        const result = res.predictions[0].candidates[0].content;
-        history.push({
-          author: 'bot',
-          content: result,
-          citationMetadata: {
-            citations: [],
-          },
-        });
-        return result;
-      }
-    }
-  }
-}
-
-class PalmTextApi {
-  constructor(project_id, gcp_region, model_name, model_params) {
-    this.project_id = project_id;
-    if (!gcp_region) {
-      gcp_region = Config.vertexAi.location;
-    }
-    if (!model_name) {
-      model_name = Config.vertexAi.modelName;
-    }
-    this.url = `https://${gcp_region}-aiplatform.googleapis.com/v1/projects/${project_id}/locations/${gcp_region}/publishers/google/models/${model_name}:predict`;
-    this.modelParams = Object.assign(
-      {},
-      Config.vertexAi.modelParams,
-      model_params
-    );
-  }
-
-  predict(prompt) {
-    const data = {
-      instances: [{ content: prompt }],
-      parameters: this.modelParams,
-    };
-    Logger.log(`PaLM API payload: ${JSON.stringify(data)}`);
-
-    const request = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'authorization': `Bearer ${ScriptApp.getOAuthToken()}`,
-      },
-      payload: JSON.stringify(data),
-      muteHttpExceptions: true,
-    };
-    const res = fetchJson(this.url, request);
-    if (res.predictions) {
-      if (res.predictions[0].safetyAttributes.blocked) {
-        throw new Error(
-          `Request was blocked as it triggered API safety filters. Prompt: ${prompt}`
-        );
-      } else if (!res.predictions[0].content) {
-        throw new Error(`Received empty response from API. Prompt: ${prompt}`);
-      } else {
-        return res.predictions[0].content;
-      }
-    }
-  }
-}
-*/
