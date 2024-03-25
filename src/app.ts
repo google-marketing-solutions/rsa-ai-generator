@@ -54,7 +54,7 @@ function getErrorFromResponse(responseText: string) {
       ]
      */
     const data = resJson && resJson.length ? resJson[0] : resJson;
-    if (data && data.error) {
+    if (data?.error) {
       errorMsg = data.error.message;
       if (data.error.details && data.error.details.length) {
         errorMsg = errorMsg + '. ' + data.error.details[0].errors?.[0]?.message;
@@ -211,17 +211,17 @@ export class GoogleAdsClient {
       if (!data) {
         Logger.log(`WARNING: empty response recieved for cid=${customerId}`);
       }
-      if (data && data.error) {
+      if (data?.error) {
         throw new Error(data.error.message);
       }
-      if (data && data.results) {
+      if (data?.results) {
         if (!results) {
           results = data.results;
         } else {
           results = results.concat(data.results);
         }
       }
-      if (data && data.nextPageToken) {
+      if (data?.nextPageToken) {
         request.payload.pageToken = data.nextPageToken;
         continue;
       }
