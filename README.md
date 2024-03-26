@@ -29,7 +29,8 @@ for RSA from existing keywords.
 # Deliverable (implementation)
 This repository contains source code for an Apps Script library project. It's based on [ASIDE](https://github.com/google/aside) 
 which in a turn based on [clasp](https://github.com/google/clasp).  
-Thanks to those awesome libraries development can be done locally in TypeScript, transpiled to JavaScript and push a Apps Script project.
+Thanks to those awesome libraries development can be done locally in TypeScript, transpiled to JavaScript and 
+push a Apps Script project.
 
 
 # Deployment
@@ -42,7 +43,7 @@ doing some setup steps in it described in the following doc:
 From the developer's viewpoint the deployment is updating an Apps Script library project with transpiled code.
 
 To push code you need a `.clasp.json` file in the root folder. It's created by either `deploy` or `deploy:prod` npm commands 
-from `.clasp-dev.json` and `.clasp-prod.json` respectadly. 
+from `.clasp-dev.json` and `.clasp-prod.json` respectadly.  
 They are kept out of git to prevent accidental push. 
 
 Example of `.clasp.json`:

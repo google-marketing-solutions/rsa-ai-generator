@@ -103,14 +103,14 @@ function fetchJson(url: string, params: any, retryNum?: number): any {
     Utilities.sleep(Config.vertexAi.quotaLimitDelay);
     return fetchJson(url, params);
   }
-  const response_text = response.getContentText();
+  const responseText = response.getContentText();
   // TODO: check 'logging' setting
   Logger.log(
-    `Code: ${code}\nResponse: (length=${response_text.length})\n ${response_text}`
+    `Code: ${code}\nResponse: (length=${responseText.length})\n ${responseText}`
   );
   if (code === 403) {
-    const error_msg = getErrorFromResponse(response_text);
-    throw new Error(`Permission denined` + (error_msg ? ': ' + error_msg : ''));
+    const errorMsg = getErrorFromResponse(responseText);
+    throw new Error(`Permission denined` + (errorMsg ? ': ' + errorMsg : ''));
   }
   if (code === 502 || code === 504 || code === 504) {
     // 502 - Bad Gateway
@@ -124,17 +124,17 @@ function fetchJson(url: string, params: any, retryNum?: number): any {
     return fetchJson(url, params, retryNum);
   }
   if (code !== 200) {
-    let error_msg = getErrorFromResponse(response_text);
-    error_msg =
-      error_msg || `API call has failed (url: ${url}) with code ${code}`;
-    throw new Error(error_msg);
+    let errorMsg = getErrorFromResponse(responseText);
+    errorMsg =
+      errorMsg || `API call has failed (url: ${url}) with code ${code}`;
+    throw new Error(errorMsg);
   }
   try {
-    return JSON.parse(response_text);
+    return JSON.parse(responseText);
   } catch (e) {
-    if (response_text.length >= 50 * 1024 * 1024) {
+    if (responseText.length >= 50 * 1024 * 1024) {
       throw new Error(
-        `API response is too large (${response_text.length}) and was truncated, as so it could not be passed. Please contact the developers. Original error: ${e}`
+        `API response is too large (${responseText.length}) and was truncated, as so it could not be passed. Please contact the developers. Original error: ${e}`
       );
     }
     throw new Error(`An error ocurred on API response parsing: ${e}`);
