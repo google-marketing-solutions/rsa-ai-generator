@@ -25,6 +25,13 @@ import {
 
 export const app = null;
 
+export function enter_dev_token() {
+  const res = SpreadsheetApp.getUi().prompt('Enter developer token');
+  const dev_token = res.getResponseText();
+  const documentProperties = PropertiesService.getDocumentProperties();
+  documentProperties.setProperty(SETTINGS.ADS_DEV_TOKEN, dev_token);
+}
+
 function getErrorFromResponse(responseText: string) {
   let errorMsg = '';
   try {
@@ -244,12 +251,16 @@ export async function fetch_keywords() {
     );
     return;
   }
-  const devToken = ConfigReader.getValue(SETTINGS.ADS_DEV_TOKEN);
+  let devToken = ConfigReader.getValue(SETTINGS.ADS_DEV_TOKEN);
   if (!devToken) {
-    SpreadsheetApp.getUi().alert(
-      'Please specify a developer token on the Configuration sheet'
-    );
-    return;
+    const documentProperties = PropertiesService.getDocumentProperties();
+    devToken = documentProperties.getProperty(SETTINGS.ADS_DEV_TOKEN);
+    if (!devToken) {
+      SpreadsheetApp.getUi().alert(
+        'Please specify a developer token either on the Configuration sheet or enter via prompt from the menu (to keep it secretly)'
+      );
+      return;
+    }
   }
   const client = new GoogleAdsClient({
     devToken: devToken,

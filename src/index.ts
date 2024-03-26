@@ -41,6 +41,10 @@ function onOpen(var_name: string) {
     },
     null,
     {
+      name: 'Enter Ads developer token',
+      functionName: var_name + '.enter_dev_token',
+    },
+    {
       name: 'DEBUG: Generate headlines/descriptions for the selected row',
       functionName: var_name + '.generate_rsa_current_row',
     },
