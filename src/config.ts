@@ -18,7 +18,7 @@ import { Predictor } from './app';
 interface Settings {
   CID: string;
   MCC: string;
-  CAMPAGIN: string;
+  CAMPAIGN: string;
   MAX_KEYWORDS: string;
   ADS_DEV_TOKEN: string;
   CLOUD_PROJECT_ID: string;
@@ -44,7 +44,7 @@ interface Settings {
 export const SETTINGS: Settings = {
   CID: '',
   MCC: '',
-  CAMPAGIN: '',
+  CAMPAIGN: '',
   MAX_KEYWORDS: '',
   ADS_DEV_TOKEN: '',
   CLOUD_PROJECT_ID: '',
@@ -182,7 +182,7 @@ export function reset_configuration() {
     ],
     [SETTINGS.MCC, '', 'Google Ads MCC account id'],
     [
-      SETTINGS.CAMPAGIN,
+      SETTINGS.CAMPAIGN,
       '',
       'Google Ads campaign id (leave blank to fetch all campaigns)',
     ],

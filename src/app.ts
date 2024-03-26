@@ -236,7 +236,7 @@ export class GoogleAdsClient {
 export async function fetch_keywords() {
   const mccId = ConfigReader.getValue(SETTINGS.MCC);
   const seedCustomerId = ConfigReader.getValue(SETTINGS.CID) || mccId;
-  const campaignId = ConfigReader.getValue(SETTINGS.CAMPAGIN);
+  const campaignId = ConfigReader.getValue(SETTINGS.CAMPAIGN);
   const maxKeywords = ConfigReader.getValue(SETTINGS.MAX_KEYWORDS) || 20;
   if (!seedCustomerId) {
     SpreadsheetApp.getUi().alert(
