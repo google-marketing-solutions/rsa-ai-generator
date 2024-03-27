@@ -1,5 +1,5 @@
 /**
- * Copyright 2023 Google LLC
+ * Copyright 2023-2024 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,12 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// import {
-//   fetch_keywords,
-//   generate_rsa,
-//   generate_ads_editor,
-//   generate_rsa_current_row,
-// } from './app';
+
 import { app } from './app';
 
 app;

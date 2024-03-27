@@ -8,6 +8,8 @@
     "*.txt",
     ".github",
     "CONTRIBUTING",
+    "CONTRIBUTING.md",
+    "README.md",
     "build",
     "dist"
   ],
