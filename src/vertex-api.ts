@@ -16,36 +16,40 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import {
-  ConfigReader,
   SETTINGS,
   Config,
   BlockingThreshold,
   SafetyCategory,
+  IConfigReader,
 } from './config';
 import { fetchJson } from './interop';
 
 export class GeminiVertexApi {
   projectId: string;
+  configReader: IConfigReader;
   url: string;
   modelParams: any;
   logging: boolean;
   safetySettings: { category: SafetyCategory; threshold: BlockingThreshold }[];
 
-  constructor(projectId: string) {
+  constructor(projectId: string, configReader: IConfigReader) {
     this.projectId = projectId;
+    this.configReader = configReader;
     const gcpRegion =
-      ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_REGION) ||
+      this.configReader.getValue(SETTINGS.CLOUD_PROJECT_REGION) ||
       Config.vertexAi.location ||
       'us-central1';
     const modelName =
-      ConfigReader.getValue(SETTINGS.LLM_Name) ||
+      this.configReader.getValue(SETTINGS.LLM_Name) ||
       Config.vertexAi.modelName ||
       'gemini-pro';
     this.url = `https://${gcpRegion}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${gcpRegion}/publishers/google/models/${modelName}:streamGenerateContent`;
 
     const safetySettings = Object.assign({}, Config.vertexAi.safetySettings);
     for (const category of Object.keys(Config.vertexAi.safetySettings)) {
-      const threshold = <BlockingThreshold>ConfigReader.getValue(category);
+      const threshold = <BlockingThreshold>(
+        this.configReader.getValue('LLM_SAFETY_' + category)
+      );
       if (threshold) {
         // safety category has an overriden threshold in Configuration
         safetySettings[<SafetyCategory>category] = threshold;
@@ -67,7 +71,7 @@ export class GeminiVertexApi {
     );
     //  - overwrite modelParams from Configuration
     for (const category of Object.keys(modelParams)) {
-      const value = ConfigReader.getValue('LLM_Params_' + category);
+      const value = this.configReader.getValue('LLM_Params_' + category);
       if (value) {
         modelParams[<keyType>category] = value;
       }
@@ -117,6 +121,7 @@ export class GeminiVertexApi {
           reply += text;
         }
       }
+      // TODO: we might want to retry the request if the last part of response has finishReason != STOP (e.g OTHER)
       history.push({
         role: 'model',
         parts: [
@@ -129,32 +134,32 @@ export class GeminiVertexApi {
         Logger.log(`GeminiApi: parsed response: ${reply}`);
       }
       return reply;
-    } else if (res.promptFeedback && res.promptFeedback.blockReason) {
-      throw new Error(
-        `Request was blocked as it triggered API safety filters. Reason: ${res.promptFeedback.blockReason}.\n Original prompt: ${prompt}`
-      );
     } else {
       throw new Error(`Uknown response from the API: ${JSON.stringify(res)}`);
     }
   }
 
   _parseResponse(res: any, prompt: string) {
+    if (res.promptFeedback && res.promptFeedback.blockReason) {
+      throw new Error(
+        `Request was blocked as it triggered API safety filters. Reason: ${res.promptFeedback.blockReason}.\n Original prompt: ${prompt}`
+      );
+    }
     if (res.candidates) {
       if (res.candidates[0].content) {
         const result = res.candidates[0].content;
         if (!result.parts || !result.parts.length) {
           return '';
         }
-        // if (!result.parts[0].text) {
-        //   throw new Error(`Could not find expected response content. Full response: ${JSON.stringify(res)}`);
-        // }
         return result.parts[0].text || '';
       } else {
-        throw new Error(
+        // TODO: analyze res.candidates[0].finishReason;
+        Logger.log(
           `Received empty response from API. Prompt: ${prompt}. Full response: ${JSON.stringify(
             res
           )}`
         );
+        return '';
       }
     }
     return '';

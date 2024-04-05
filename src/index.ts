@@ -25,7 +25,10 @@ app;
 function onOpen(var_name: string) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.addMenu('RSA AI Generator', [
-    { name: 'Fetch keywords', functionName: var_name + '.fetch_keywords' },
+    {
+      name: 'Fetch keywords',
+      functionName: var_name + '.fetch_keywords',
+    },
     {
       name: 'Generate headlines/descriptions via AI',
       functionName: var_name + '.generate_rsa',
@@ -33,6 +36,10 @@ function onOpen(var_name: string) {
     {
       name: 'Generate data for Google Ads Editor',
       functionName: var_name + '.generate_ads_editor',
+    },
+    {
+      name: 'Generate customizer feed for Google Ads',
+      functionName: var_name + '.generate_customizer_feed',
     },
     null,
     {

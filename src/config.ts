@@ -31,6 +31,10 @@ interface Settings {
   LLM_Prompt_Headlines: string;
   LLM_Prompt_Headlines_Shorten: string;
   LLM_Prompt_Descriptions: string;
+  LLM_Prompt_Customizers: string;
+  LLM_Prompt_Headlines_Suffix: string;
+  LLM_Prompt_Descriptions_Suffix: string;
+  LLM_Prompt_Customizers_Suffix: string;
   LLM_SAFETY_HARM_CATEGORY_SEXUALLY_EXPLICIT: string;
   LLM_SAFETY_HARM_CATEGORY_HATE_SPEECH: string;
   LLM_SAFETY_HARM_CATEGORY_HARASSMENT: string;
@@ -39,6 +43,8 @@ interface Settings {
   ADSEDITOR_add_long_descriptions: string;
   ADSEDITOR_add_generic_headlines: string;
   ADSEDITOR_add_generic_descriptions: string;
+  ADS_CUSTOMIZER_NAME: string;
+  ADS_CUSTOMIZER_use_llm: string;
   LOGGING: string;
 }
 export const SETTINGS: Settings = {
@@ -57,6 +63,10 @@ export const SETTINGS: Settings = {
   LLM_Prompt_Headlines: '',
   LLM_Prompt_Headlines_Shorten: '',
   LLM_Prompt_Descriptions: '',
+  LLM_Prompt_Customizers: '',
+  LLM_Prompt_Headlines_Suffix: '',
+  LLM_Prompt_Descriptions_Suffix: '',
+  LLM_Prompt_Customizers_Suffix: '',
   LLM_SAFETY_HARM_CATEGORY_SEXUALLY_EXPLICIT: '',
   LLM_SAFETY_HARM_CATEGORY_HATE_SPEECH: '',
   LLM_SAFETY_HARM_CATEGORY_HARASSMENT: '',
@@ -65,6 +75,8 @@ export const SETTINGS: Settings = {
   ADSEDITOR_add_long_descriptions: '',
   ADSEDITOR_add_generic_headlines: '',
   ADSEDITOR_add_generic_descriptions: '',
+  ADS_CUSTOMIZER_NAME: '',
+  ADS_CUSTOMIZER_use_llm: '',
   LOGGING: '',
 };
 for (const key of Object.keys(SETTINGS)) {
@@ -165,6 +177,16 @@ export class ConfigReader {
   }
 }
 
+export interface IConfigReader {
+  getValue(name: string): string;
+}
+
+export class ConfigSheetReader implements IConfigReader {
+  getValue(name: string): string {
+    return ConfigReader.getValue(name);
+  }
+}
+
 export function reset_configuration() {
   let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
     Config.sheets.Configuration
@@ -216,7 +238,7 @@ export function reset_configuration() {
     [
       SETTINGS.LLM_Prompt_Headlines,
       '',
-      'Prompt for generating headlines. Leave blank for using the default. Support macros: CUSTOMER_NAME, KEYWORDS',
+      'Prompt for generating headlines. Leave blank for using the default. Support macros: CUSTOMER_NAME, KEYWORDS, SUFFIX',
     ],
     [
       SETTINGS.LLM_Prompt_Headlines_Shorten,
@@ -226,7 +248,27 @@ export function reset_configuration() {
     [
       SETTINGS.LLM_Prompt_Descriptions,
       '',
-      'Prompt for generating descriptions. Leave blank for using the default. Support macros: CUSTOMER_NAME, KEYWORDS, KEYWORDS',
+      'Prompt for generating descriptions. Leave blank for using the default. Support macros: CUSTOMER_NAME, KEYWORDS, HEADLINES, SUFFIX',
+    ],
+    [
+      SETTINGS.LLM_Prompt_Customizers,
+      '',
+      'Prompt for generating customizer feed values for keywords. Supported macros: CUSTOMER_NAME, KEYWORDS, SUFFIX',
+    ],
+    [
+      SETTINGS.LLM_Prompt_Headlines_Suffix,
+      '',
+      'Additional text to add to the prompt for headlines (as {SUFFIX} macro)',
+    ],
+    [
+      SETTINGS.LLM_Prompt_Descriptions_Suffix,
+      '',
+      'Additional text to add to the prompt for descriptions (as {SUFFIX} macro)',
+    ],
+    [
+      SETTINGS.LLM_Prompt_Customizers_Suffix,
+      '',
+      'Additional text to add to the prompt for customer feed values (as {SUFFIX} macro)',
     ],
     [
       SETTINGS.ADSEDITOR_add_long_headlines,
@@ -248,6 +290,12 @@ export function reset_configuration() {
       '',
       'A range to take generic descriptions from, e.g. Data!C1:C20 ("Date" is the name of sheet)',
     ],
+    [SETTINGS.ADS_CUSTOMIZER_NAME, '', 'Customizer attribute name'],
+    [
+      SETTINGS.ADS_CUSTOMIZER_use_llm,
+      'TRUE',
+      'TRUE/FALSE - use LLM for generating customizer feed',
+    ],
     [SETTINGS.LOGGING, 'TRUE', ''],
   ];
   sheet?.getRange(1, 1, values.length, values[0].length).setValues(values);
@@ -265,6 +313,10 @@ export function reveal_prompts() {
   ConfigReader.setValue(
     SETTINGS.LLM_Prompt_Descriptions,
     Predictor.DEFAULT_PROMPT_DESCRIPTIONS
+  );
+  ConfigReader.setValue(
+    SETTINGS.LLM_Prompt_Customizers,
+    Predictor.DEFAULT_PROMPT_CUSTOMIZERS
   );
 }
 
