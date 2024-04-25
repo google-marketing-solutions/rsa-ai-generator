@@ -18,8 +18,8 @@ import { IConfigReader } from '../src/config';
 export class ConfigMockReader implements IConfigReader {
   values: Record<string, string> = {};
 
-  getValue(name: string): string {
-    return this.values[name];
+  getValue(name: string, defaultValue?: string): string {
+    return this.values[name] || defaultValue || '';
   }
   setValue(name: string, value: string) {
     this.values[name] = value;

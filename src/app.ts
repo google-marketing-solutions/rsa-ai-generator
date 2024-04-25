@@ -56,10 +56,13 @@ export async function fetch_keywords() {
     );
     return;
   }
-  const client = new GoogleAdsClient({
-    devToken: devToken,
-    mccId: mccId,
-  });
+  const client = new GoogleAdsClient(
+    {
+      devToken: devToken,
+      mccId: mccId,
+    },
+    new ConfigSheetReader()
+  );
 
   const customerIds = await client.expandCustomers(seedCustomerId);
 
@@ -722,7 +725,7 @@ Generate a JSON array containing exactly 15 creative headlines. Each headline mu
 
   static DEFAULT_PROMPT_HEADLINES_SHORTEN = `Some of the generated headlines are shorter or longer than the minimum ({MIN}) and the maximum ({MAX}) respectedly.
 Please rewrite the following headlines to be not shorter than {MIN} and not longer than {MAX}. Only rewrite the specified hedlines in this message, do not add the previous ones.
-Please reply in JSON format and return a JSON array with headlines as elements.
+Please reply in JSON format and return a JSON array of strings with headlines as elements.
 Again do not add anything to your generated text. The headlines to rewrite are:\n\n{HEADLINES}`;
 
   static DEFAULT_PROMPT_DESCRIPTIONS = `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
@@ -734,7 +737,7 @@ And the following headlines you previously created:
 {HEADLINES}
 
 Please strictly limit each description to 80 characters.
-Please reply in JSON format and return a JSON array with descriptions as elements.
+Please reply in JSON format and return a JSON array of strings with descriptions as elements.
 Do not add any special symbols, e.g. emoji, in generated text.
 {SUFFIX}`;
 
@@ -935,8 +938,7 @@ Input Keywords (one per line):
       CUSTOMER_NAME: customerName,
       MIN: Config.ads.rsa_headline_min_length,
       MAX: Config.ads.rsa_headline_max_length,
-      SUFFIX:
-        this.configReader.getValue(SETTINGS.LLM_Prompt_Headlines_Suffix) || '',
+      SUFFIX: this.configReader.getValue(SETTINGS.LLM_Prompt_Headlines_Suffix),
     });
   }
 
@@ -967,9 +969,9 @@ Input Keywords (one per line):
       HEADLINES: adgroup.all_headlines!.join('\n'),
       MIN: Config.ads.rsa_description_min_length,
       MAX: Config.ads.rsa_description_max_length,
-      SUFFIX:
-        this.configReader.getValue(SETTINGS.LLM_Prompt_Descriptions_Suffix) ||
-        '',
+      SUFFIX: this.configReader.getValue(
+        SETTINGS.LLM_Prompt_Descriptions_Suffix
+      ),
     });
   }
 
@@ -986,9 +988,9 @@ Input Keywords (one per line):
         CUSTOMER_NAME: this.customerName,
         MIN: Config.ads.rsa_headline_min_length,
         MAX: Config.ads.rsa_headline_max_length,
-        SUFFIX:
-          this.configReader.getValue(SETTINGS.LLM_Prompt_Customizers_Suffix) ||
-          '',
+        SUFFIX: this.configReader.getValue(
+          SETTINGS.LLM_Prompt_Customizers_Suffix
+        ),
       }
     );
     let reply = this.api.predict(prompt);

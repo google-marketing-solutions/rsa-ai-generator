@@ -21,6 +21,8 @@ interface Settings {
   CAMPAIGN: string;
   MAX_KEYWORDS: string;
   ADS_DEV_TOKEN: string;
+  ADS_API_VERSION: string;
+  ADS_INTERNAL_PROXY: string;
   CLOUD_PROJECT_ID: string;
   CLOUD_PROJECT_REGION: string;
   CUSTOMER_NAME: string;
@@ -53,6 +55,8 @@ export const SETTINGS: Settings = {
   CAMPAIGN: '',
   MAX_KEYWORDS: '',
   ADS_DEV_TOKEN: '',
+  ADS_API_VERSION: '',
+  ADS_INTERNAL_PROXY: '',
   CLOUD_PROJECT_ID: '',
   CLOUD_PROJECT_REGION: '',
   CUSTOMER_NAME: '',
@@ -139,18 +143,18 @@ export const Config = {
 };
 
 export class ConfigReader {
-  static getValue(name: string) {
+  static getValue(name: string, defaultValue?: string) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
       Config.sheets.Configuration
     );
-    if (!sheet) return '';
+    if (!sheet) return defaultValue || '';
     const values = sheet.getRange(1, 1, sheet.getLastRow(), 2).getValues();
     for (const row of values) {
       if (row[0].toLowerCase() === name.toLowerCase()) {
         return row[1];
       }
     }
-    return '';
+    return defaultValue || '';
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -178,12 +182,12 @@ export class ConfigReader {
 }
 
 export interface IConfigReader {
-  getValue(name: string): string;
+  getValue(name: string, defaultValue?: string): string;
 }
 
 export class ConfigSheetReader implements IConfigReader {
-  getValue(name: string): string {
-    return ConfigReader.getValue(name);
+  getValue(name: string, defaultValue?: string): string {
+    return ConfigReader.getValue(name, defaultValue);
   }
 }
 

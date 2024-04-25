@@ -15,7 +15,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { Config } from './config';
+import { Config, IConfigReader, SETTINGS } from './config';
 import { fetchJson } from './interop';
 
 export interface GoogleAdsClientOptions {
@@ -24,10 +24,24 @@ export interface GoogleAdsClientOptions {
   apiVersion?: string;
 }
 
+type InternalAdsAppType = {
+  search: (request: string, opts: any) => any;
+};
+declare const InternalAdsApp: InternalAdsAppType;
+
 export class GoogleAdsClient {
+  configReader: IConfigReader;
+  apiVersion: string;
   devToken: string;
   mccId: string;
   endpoint: string;
+  static execHook: (
+    url: string,
+    request: any,
+    customerId: string,
+    apiVersion: string
+  ) => any | undefined;
+
   /**
    * @constructor
    * @param {Object} options
@@ -35,22 +49,55 @@ export class GoogleAdsClient {
    * @param options.devToken
    * @param options.mccId
    */
-  constructor(options?: GoogleAdsClientOptions) {
+  constructor(options: GoogleAdsClientOptions, configReader: IConfigReader) {
     options = options || {};
-    const apiVersion = options.apiVersion || Config.adsApi.api_versions;
+    this.configReader = configReader;
+    this.apiVersion =
+      options.apiVersion ||
+      configReader.getValue(
+        SETTINGS.ADS_API_VERSION,
+        Config.adsApi.api_versions
+      );
     this.devToken = options.devToken?.toString() || '';
     this.mccId = options.mccId?.toString() || '';
-    this.endpoint = `https://googleads.googleapis.com/${apiVersion}/`;
+    this.endpoint = `https://googleads.googleapis.com/${this.apiVersion}/`;
+    if (configReader.getValue(SETTINGS.ADS_INTERNAL_PROXY)) {
+      Logger.log('WARN: Using internal Google Ads client (InternalAdsApp)');
+      GoogleAdsClient.execHook = (url, request, customerId, apiVersion) => {
+        request.payload.customer_id = (customerId || this.mccId).toString();
+        Logger.log(
+          `Sending GoogleAds request: ${JSON.stringify(request.payload)}`
+        );
+        const response = InternalAdsApp.search(
+          JSON.stringify(request.payload),
+          { version: apiVersion }
+        );
+        return response;
+      };
+    }
   }
 
-  async expandCustomers(customerId: string) {
+  sendApiRequest(url: string, request: any, customerId: string): any {
+    if (GoogleAdsClient.execHook) {
+      const responseText = GoogleAdsClient.execHook(
+        url,
+        request,
+        customerId,
+        this.apiVersion
+      );
+      return JSON.parse(responseText);
+    }
+    return fetchJson(url, request);
+  }
+
+  expandCustomers(customerId: string) {
     const query = `SELECT
         customer_client.id
       FROM customer_client
       WHERE
         customer_client.status = "ENABLED" AND
         customer_client.manager = False`;
-    const rows = await this.execQuery(query, customerId);
+    const rows = this.execQuery(query, customerId);
     const cids = rows.map(row => row.customerClient.id);
     Logger.log(
       `Customer ${customerId} was expanded to these leaf customers: ${cids.join(
@@ -83,7 +130,7 @@ export class GoogleAdsClient {
     }
     let results;
     do {
-      const resJson = fetchJson(url, request);
+      const resJson = this.sendApiRequest(url, request, customerId);
       const data = resJson && resJson.length ? resJson[0] : resJson;
       if (!data) {
         Logger.log(`WARNING: empty response recieved for cid=${customerId}`);
