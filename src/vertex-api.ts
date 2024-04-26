@@ -76,7 +76,10 @@ export class GeminiVertexApi {
         modelParams[<keyType>category] = value;
       }
     }
-    this.modelParams = Object.assign(modelParams, { candidateCount: 1 });
+    this.modelParams = Object.assign(modelParams, {
+      candidateCount: 1,
+      response_mime_type: 'application/json',
+    });
 
     this.logging = false;
   }

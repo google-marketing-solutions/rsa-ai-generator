@@ -724,7 +724,7 @@ Generate a JSON array containing exactly 15 creative headlines. Each headline mu
 {SUFFIX}`;
 
   static DEFAULT_PROMPT_HEADLINES_SHORTEN = `Some of the generated headlines are shorter or longer than the minimum ({MIN}) and the maximum ({MAX}) respectedly.
-Please rewrite the following headlines to be not shorter than {MIN} and not longer than {MAX}. Only rewrite the specified hedlines in this message, do not add the previous ones.
+Please rewrite the following headlines to be not shorter than {MIN} and not longer than {MAX} symbols. Only rewrite the specified headlines in this message, do not add the previous ones.
 Please reply in JSON format and return a JSON array of strings with headlines as elements.
 Again do not add anything to your generated text. The headlines to rewrite are:\n\n{HEADLINES}`;
 
