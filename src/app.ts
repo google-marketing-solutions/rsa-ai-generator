@@ -772,9 +772,18 @@ export class Predictor {
   promptCustomizersTemplate: string;
   history: any[];
 
-  static DEFAULT_PROMPT_HEADLINES = `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
-Generate a JSON array containing exactly 15 creative headlines. Each headline must be strictly limited to 25 characters. Use the keywords below (each keyword is on a separate line), and do not add any additional text, symbols, or formatting to the JSON response:
+  static DEFAULT_PROMPT_HEADLINES = `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer in Google Ads.
+Keywords capture what users search on google.com while headlines and descriptions are what users see in ads that relevant to their search.
 
+*Instructions*:
+
+1. Please generate 15 best selling creative headlines of maximum 25 characters each for a Google Ads search campaign (RSA).
+2. Use the keywords below (in the "Input Keywords" section) as input.
+3. Concise Formatting: Do not add any additional text, symbols, emoji, or formatting (e.g. Markdown) to your JSON response.
+4. Language Matching: Detect the language of each input keyword and generate the headline in the same language.
+5. Output Format: Return a JSON array of strings, where each string is a headline. Do not add anything around the code block.
+
+*Input Keywords* (one per line):
 {KEYWORDS}
 
 {SUFFIX}`;
@@ -782,19 +791,24 @@ Generate a JSON array containing exactly 15 creative headlines. Each headline mu
   static DEFAULT_PROMPT_HEADLINES_SHORTEN = `Some of the generated headlines are shorter or longer than the minimum ({MIN}) and the maximum ({MAX}) respectedly.
 Please rewrite the following headlines to be not shorter than {MIN} and not longer than {MAX} symbols. Only rewrite the specified headlines in this message, do not add the previous ones.
 Please reply in JSON format and return a JSON array of strings with headlines as elements.
-Again do not add anything to your generated text. The headlines to rewrite are:\n\n{HEADLINES}`;
+Again do not add any additional text, symbols, emoji, or formatting (e.g. Markdown) to your JSON response. The headlines to rewrite are:\n\n{HEADLINES}`;
 
-  static DEFAULT_PROMPT_DESCRIPTIONS = `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer.
-Please generate 4 best selling creative descriptions of maximum 80 characters each for a Google Ads search campaign (RSA) using the following keywords as an input (each keyword is on a separate line):
+  static DEFAULT_PROMPT_DESCRIPTIONS = `You are a marketing specialist accountable for generating search campaigns for {CUSTOMER_NAME} customer in Google Ads.
+Keywords capture what users search on google.com while headlines and descriptions are what users see in ads that relevant to their search.
 
+*Instructions*:
+1. Please generate 4 best selling creative descriptions of maximum 80 characters each for a Google Ads search campaign (RSA)
+2. Use the keywords (in the "Input Keywords" section) and headlines (in the "Input Headlines" section) below as input.
+3. Concise Formatting: Do not add any additional text, symbols, emoji, or formatting (e.g. Markdown) to your JSON response.
+4. Language Matching: Detect the language of each input keyword and generate the headline in the same language.
+5. Output Format: Return a JSON array of strings, where each string is a description. Do not add anything around the code block.
+
+*Input Keywords* (one per line):
 {KEYWORDS}
 
-And the following headlines you previously created:
+*Input Headlines* (one per line) - the ones you previously generated from the keywords:
 {HEADLINES}
 
-Please strictly limit each description to 80 characters.
-Please reply in JSON format and return a JSON array of strings with descriptions as elements.
-Do not add any special symbols, e.g. emoji, in generated text.
 {SUFFIX}`;
 
   static DEFAULT_PROMPT_CUSTOMIZERS = `You are transforming keywords into compelling headlines for Google Ads Responsive Search Ads (RSAs).
