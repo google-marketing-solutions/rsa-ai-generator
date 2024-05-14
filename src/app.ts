@@ -27,6 +27,14 @@ import { GeminiVertexApi } from './vertex-api';
 
 export const app = null;
 
+export function open_sidebar() {
+  const html = HtmlService.createTemplateFromFile('static/sidebar')
+    .evaluate()
+    .setTitle('RSA AI Generator');
+
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
 export function enter_dev_token() {
   const res = SpreadsheetApp.getUi().prompt('Enter developer token');
   const dev_token = res.getResponseText();
@@ -256,7 +264,7 @@ interface AdGroup {
   descriptions?: string;
 }
 
-function _get_predictor() {
+function getPredictor() {
   const projectId = ConfigReader.getValue(SETTINGS.CLOUD_PROJECT_ID);
   if (!projectId) {
     SpreadsheetApp.getUi().alert(
@@ -280,12 +288,17 @@ function _get_predictor() {
   return predictor;
 }
 
+interface RowsRange {
+  startRow?: number;
+  endRow?: number;
+}
+
 /**
  * Root function for calling from the UI menu.
  * Goes through all keywords (they should be fetched first via fetch_keywords)
  *   and generates headlines via PaLM API.
  */
-export function generate_rsa(rowToProcess?: number) {
+export function generate_rsa(range?: RowsRange) {
   const sheet = SpreadsheetApp.getActiveSheet();
   if (!sheet.getName().toLocaleLowerCase().startsWith('keywords')) {
     console.log(sheet.getName());
@@ -295,18 +308,33 @@ export function generate_rsa(rowToProcess?: number) {
     return;
   }
 
-  const predictor = _get_predictor();
+  const predictor = getPredictor();
   if (!predictor) return;
 
-  let rowNo = rowToProcess || 2;
-  const rowNums = rowToProcess ? 1 : sheet.getLastRow() - 1;
+  if (!range) {
+    range = {
+      startRow: 2,
+      endRow: sheet.getLastRow(),
+    };
+  }
+  range.startRow = range.startRow || 2;
+  range.endRow = range.endRow || sheet.getLastRow();
+  if (range.startRow < 2) {
+    // data rows start with #2 in a sheet
+    range.startRow = 2;
+  }
+  const rowNums = range.endRow - range.startRow + 1;
   const lastCol = sheet.getLastColumn();
-  const values = sheet.getRange(rowNo, 1, rowNums, lastCol - 2).getValues();
+  const values = sheet
+    .getRange(range.startRow, 1, rowNums, lastCol - 2)
+    .getValues();
   Logger.log(
-    `Generating headlines for "${predictor.customerName}" for all ${values.length} adgroups`
+    `Generating headlines for "${predictor.customerName}" for ${values.length} adgroups`
   );
 
-  // A/1: customer_id, B/2: customer_name, C/3:campaign_id, D/4: campaign_name, E/5: adgroup_id, F/6: adgroup_name, G/7: keywords, H/8: urls, I/9: ignore, J/10: headlines, K/11: descriptions
+  // A/1: customer_id, B/2: customer_name, C/3:campaign_id, D/4: campaign_name,
+  // E / 5: adgroup_id, F / 6: adgroup_name, G / 7: keywords, H / 8: urls,
+  // I / 9: ignore, J / 10: headlines, K / 11: descriptions
   const columns = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   const COL_Headlines = columns.indexOf('headlines') + 1;
   const COL_Descriptions = columns.indexOf('descriptions') + 1;
@@ -317,7 +345,10 @@ export function generate_rsa(rowToProcess?: number) {
   if (COL_Descriptions === 0) {
     throw new Error('Could not fild a column with title "descriptions"');
   }
+  const adGroupsQueue: { adGroup: AdGroup; rowNo: number }[] = [];
+  let rowNo = range.startRow - 1;
   for (const row of values) {
+    rowNo += 1; // this is row number in the sheet with current AdGroup
     // each row is an unique adgroup
     const adGroup: AdGroup = {
       customer_id: row[0],
@@ -333,12 +364,6 @@ export function generate_rsa(rowToProcess?: number) {
       all_headlines: undefined,
       descriptions: undefined,
     };
-    Logger.log(
-      `Processing adgroup ${adGroup.adgroup_id} (${adGroup.adgroup_name}) - ${
-        rowNo - 1
-      } of ${values.length}`
-    );
-    predictor.clearHistory();
 
     if (adGroup.ignore) {
       Logger.log(
@@ -352,34 +377,23 @@ export function generate_rsa(rowToProcess?: number) {
       );
       continue;
     }
-
-    const genRes = predictor.getHeadlines(adGroup);
-
-    adGroup.headlines = genRes.headlines.join('\n');
-    adGroup.all_headlines = [
-      ...genRes.headlines,
-      ...(genRes.longHeadlines || []),
-    ];
-    const allHeadlines = [];
-    let allHeadlinesText = '';
-    allHeadlines.push(...genRes.headlines);
-    if (genRes.longHeadlines.length) {
-      const MAX = Config.ads.rsa_headline_max_length;
-      allHeadlines.push('\nHeadlines longer than ' + MAX + ':');
-      allHeadlines.push(...genRes.longHeadlines);
-      allHeadlinesText = allHeadlines.join('\n');
-    } else {
-      allHeadlinesText = adGroup.headlines;
-    }
-    if (allHeadlinesText) {
-      Logger.log(
-        `[AdGroup ${adGroup.adgroup_id}]: generated headlines: ${allHeadlinesText}`
-      );
-    } else {
-      Logger.log(
-        `WARNING: no headlines were generated for ${adGroup.adgroup_id} (${adGroup.adgroup_name})`
-      );
-    }
+    adGroupsQueue.push({
+      adGroup,
+      rowNo: rowNo,
+    });
+  }
+  // NOTE: we have 6 minutes quota for execution time,
+  // roughly we can process 40 adgroups
+  for (let i = 0; i < adGroupsQueue.length; i++) {
+    const adGroup = adGroupsQueue[i].adGroup;
+    const rowNo = adGroupsQueue[i].rowNo;
+    Logger.log(
+      `Processing adgroup ${adGroup.adgroup_id} (${adGroup.adgroup_name}) - ${
+        rowNo - 1
+      } of ${adGroupsQueue.length}`
+    );
+    predictor.clearHistory();
+    const allHeadlinesText = getHeadlinesForAdgroup(predictor, adGroup);
     sheet.getRange(rowNo, COL_Headlines).setValue(allHeadlinesText);
     if (allHeadlinesText) {
       adGroup.descriptions = predictor.getDescriptions(adGroup);
@@ -390,24 +404,66 @@ export function generate_rsa(rowToProcess?: number) {
         );
       }
     }
-    rowNo += 1;
     // update UI on each 10th iteration
-    if (rowNo % 10 === 0) {
+    if ((i + 1) % 10 === 0) {
       SpreadsheetApp.flush();
     }
   }
 }
 
+function getHeadlinesForAdgroup(predictor: Predictor, adGroup: AdGroup) {
+  const genRes = predictor.getHeadlines(adGroup);
+
+  adGroup.headlines = genRes.headlines.join('\n');
+  adGroup.all_headlines = [
+    ...genRes.headlines,
+    ...(genRes.longHeadlines || []),
+  ];
+  const allHeadlines = [];
+  let allHeadlinesText = '';
+  allHeadlines.push(...genRes.headlines);
+  if (genRes.longHeadlines.length) {
+    const MAX = Config.ads.rsa_headline_max_length;
+    allHeadlines.push('\nHeadlines longer than ' + MAX + ':');
+    allHeadlines.push(...genRes.longHeadlines);
+    allHeadlinesText = allHeadlines.join('\n');
+  } else {
+    allHeadlinesText = adGroup.headlines;
+  }
+  if (allHeadlinesText) {
+    Logger.log(
+      `[AdGroup ${adGroup.adgroup_id}]: generated headlines: ${allHeadlinesText}`
+    );
+  } else {
+    Logger.log(
+      `WARNING: no headlines were generated for ${adGroup.adgroup_id} (${adGroup.adgroup_name})`
+    );
+  }
+  return allHeadlinesText;
+}
+
 export function generate_rsa_current_row() {
   const ui = SpreadsheetApp.getUi();
-  let row = SpreadsheetApp.getCurrentCell().getRowIndex();
+  const row = SpreadsheetApp.getCurrentCell().getRowIndex();
   const res = ui.prompt(
-    `Run generation for the row with index ${row}. Or enter another row index`,
+    `Run generation for the row with index ${row} (presess Yes). Or enter either another row index or a range (start:end)`,
     ui.ButtonSet.YES_NO
   );
+  const range: RowsRange = {};
   if (res.getSelectedButton() === ui.Button.YES) {
-    row = res.getResponseText() ? parseInt(res.getResponseText()) : row;
-    generate_rsa(row);
+    const reply = res.getResponseText();
+    if (reply) {
+      if (reply.indexOf(':')) {
+        const parts = reply.split(':');
+        range.startRow = parseInt(parts[0]);
+        range.endRow = parseInt(parts[1]);
+      } else {
+        range.endRow = range.startRow = parseInt(reply);
+      }
+    } else {
+      range.endRow = range.startRow = row;
+    }
+    generate_rsa(range);
   }
 }
 
@@ -598,7 +654,7 @@ export function generate_ads_editor() {
   sheetDst.getRange(2, 1, rows.length, columns.length).setValues(rows);
 }
 
-function _normalizeKeywordForCustomizerFeed(kw: string) {
+function normalizeKeywordForCustomizerFeed(kw: string) {
   if (!kw) return kw;
   kw = kw.replaceAll(/["'`[\]+\-|!]/gi, '').trim();
   kw = kw[0].toUpperCase() + kw.substring(1);
@@ -624,7 +680,7 @@ export function generate_customizer_feed() {
 
   let predictor: Predictor | undefined = undefined;
   if (useLlm) {
-    predictor = _get_predictor();
+    predictor = getPredictor();
     if (!predictor) return;
   }
   const customizerName =
@@ -673,7 +729,7 @@ export function generate_customizer_feed() {
             campaign_id,
             adgroup_id,
             kw,
-            _normalizeKeywordForCustomizerFeed(kw),
+            normalizeKeywordForCustomizerFeed(kw),
           ];
           rows.push(row);
         }

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<!--
+Copyright 2023-2024 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<meta charset="utf-8">
+<title>RSA AI Generator</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+  }
+
+  .form-element {
+    margin: 10px 0;
+  }
+
+  .form-element label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+
+  .form-element input {
+    width: 100%;
+    padding: 5px;
+    box-sizing: border-box;
+  }
+
+  .info-panel {
+    background-color: rgb(238, 238, 238);
+    padding: 10px;
+  }
+  button {
+    padding: 5px;
+    width: 200px;
+    margin: 10px 0;
+    background-color: #616F89;
+    color: white;
+    border-radius: 5px;
+    border: none;
+  }
+
+  button:hover {
+    background-color: #4A5A73;
+  }
+  .text-right {
+    text-align: right;
+  }
+  textarea {
+    width: 100%;
+    height: 400px;
+    margin-top: 10px;
+    padding: 10px;
+    box-sizing: border-box;
+  }
+  thead, td, th {
+    border-style: solid;
+    border-width: 0;
+  }
+
+</style>
+
+<body>
+  <div class="form-element">
+    <div class="info-panel">Google Docs limits script excution time to 6 minutes. Using this UI you can run ads generation splitted by chunks. Please activate a sheet with keywords before running.
+      <p>By default generation will run for all rows (adgroups) but you can limit the range by entering start/end rows.</p>
+    </div>
+  </div>
+  <div class="form-element">
+    <label for="rowStart">Start row:</label>
+    <input type="number" id="rowStart" title="Start row">
+  </div>
+  <div class="form-element">
+    <label for="rowEnd">End row:</label>
+    <input type="number" id="rowEnd" title="End row">
+  </div>
+  <div class="form-element">
+    <label for="batchSize">Batch size:</label>
+    <input type="number" id="batchSize" title="Batch size">
+  </div>
+  <button id='btn-run' onclick='onRun()' style='margin: 10px;padding:5px; width: 100px'>Run</button>
+
+  <button id='btn-stop' onclick='onStop()' style='margin: 10px;padding:5px; width: 100px' disabled>Stop</button>
+  <p>
+  <table style="width: 100%; border: 1px solid;" id="tJobs">
+    <thead>
+      <tr>
+        <th class="text-right">#</th>
+        <th class="text-right">Range</th>
+        <th class="text-right">Status</th>
+        <th class="text-right">Elapsed</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <textarea id='log' style="width:100%; height: 400px"></textarea><br>
+  <input type="checkbox" id="tracing"><label for="tracing">Debug logging</label>
+
+    <?!= include('static/runner'); ?>
+    <script>
+      const BATCH_SIZE = 35;
+      let gRunner;
+      document.getElementById('batchSize').value = BATCH_SIZE;
+
+      function writeStatus(msg) {
+        const log = document.getElementById('log');
+        if (log.value) {
+          msg = "\n" + msg;
+        }
+        log.value = log.value + msg;
+      }
+
+      function enableElement(id, enabled) {
+        document.getElementById(id).disabled = !enabled;
+      }
+
+      function setUiState(enable) {
+        enableElement('rowStart', enable);
+        enableElement('rowEnd', enable);
+        enableElement('batchSize', enable);
+        enableElement('btn-run', enable);
+        enableElement('btn-stop', !enable);
+      }
+      function enableUi() {
+        setUiState(true);
+      }
+
+      function disableUi() {
+        setUiState(false);
+      }
+
+      function onError(error) {
+        enableUi();
+        writeStatus('Error: ' + (error.message ?? error));
+      }
+
+      function onStop() {
+        if (!gRunner) {
+          enableUi();
+          return;
+        }
+        gRunner.stop();
+      }
+
+      function onRun() {
+        disableUi();
+        document.getElementById('log').value = '';
+        let rowStart = document.getElementById('rowStart').value;
+        let rowEnd = document.getElementById('rowEnd').value;
+        const batchSize = parseInt(document.getElementById('batchSize').value || BATCH_SIZE, 10);
+        if (!batchSize || batchSize<1) {
+          alert('Batch size should > 1');
+          return;
+        }
+        if (!rowStart || !rowEnd) {
+          writeStatus('Fetching sheet\'s rows range');
+          google.script.run
+            .withSuccessHandler((res) => {
+              //writeStatus('get_sheet_state_ui completed: ' + res);
+              const sheetStat = JSON.parse(res);
+              const rowEnd = sheetStat.lastRow;
+              if (rowEnd < 2) {
+                writeStatus('No rows found in the sheet');
+              } else {
+                startExecution(2, rowEnd, batchSize);
+              }
+            })
+            .withFailureHandler(onError)
+            .onClientCall("get_sheet_state_ui");
+        } else {
+          startExecution(rowStart, rowEnd, batchSize);
+        }
+      }
+
+      function onJobStatusChanged(job) {
+        // update job's status in jobs table
+        const table = document.getElementById('tJobs').getElementsByTagName('tbody')[0];
+        const rows = table.getElementsByTagName('tr');
+        for(let tr of rows) {
+          const id = tr.getAttribute('data-jobid');
+          if (id == job.id) {
+            let td = tr.getElementsByTagName('td')[2];
+            td.innerHTML = getJobStatusHtml(job.status);
+            if (job.started && job.ended) {
+              const elapsed = (new Date(job.ended) - new Date(job.started))/1000;
+              // in seconds
+              console.log(elapsed);
+              const minutes = Math.floor(elapsed / 60);
+              const seconds = Math.floor(elapsed - 60*minutes);
+              const elapsedFormatted = minutes + ":" + seconds;
+              td = tr.getElementsByTagName('td')[3];
+              td.innerText = elapsedFormatted;
+            }
+            break;
+          }
+        }
+
+        writeStatus('Job status changed: ' + JSON.stringify(job));
+      }
+      function getJobStatusHtml(status) {
+        let color;
+        if (status === 'RUNNING') {
+          color = 'blue';
+        } else if (status === 'COMPLETE') {
+          color = 'green';
+        } else if (status === 'ERROR') {
+          color = 'red';
+        }
+        return color ? `<span style='color: ${color}'>${status}</span>` : status;
+      }
+
+      function startExecution(rowStart, rowEnd, batchSize) {
+        rowStart = parseInt(rowStart, 10);
+        rowEnd = parseInt(rowEnd, 10);
+        const batchCount = Math.ceil((rowEnd - rowStart + 1) / batchSize);
+        writeStatus(`Starting generation for range ${rowStart}:${rowEnd} in ${batchCount} batches (size ${batchSize})`);
+        let jobs = [];
+        clearJobsTable();
+        for (let i = 0; i < batchCount; i++) {
+          const job = {
+            id: i,
+            startRow: rowStart + i * batchSize,
+            endRow: Math.min(rowEnd, rowStart + i * batchSize + batchSize - 1),
+          };
+          jobs.push(job);
+          addJobsTableRow(job);
+        }
+        const tracing = document.getElementById('tracing').checked;
+        gRunner = new Runner({ tracing });
+        gRunner.logger = (s) => writeStatus(s);
+        writeStatus('Starting jobs:\n' + JSON.stringify(jobs, null, 2));
+
+        gRunner.run('generate_rsa_ui', jobs, (job) => this.onJobStatusChanged(job))
+          .then(
+            () => onExecutionCompleted(),
+            (e) => onError(e)
+          );
+      }
+
+      function onExecutionCompleted() {
+        writeStatus('Execution completed');
+        enableUi();
+      }
+
+      function clearJobsTable() {
+        const table = document.getElementById('tJobs').getElementsByTagName('tbody')[0];
+        const children = table.childNodes;
+        console.log(children);
+        for (let i = children.length-1; i>=0; i--) {
+          table.removeChild(children[i]);
+        }
+      }
+
+      function addJobsTableRow(job) {
+        const table = document.getElementById('tJobs').getElementsByTagName('tbody')[0];
+        const tr = document.createElement('tr');
+        table.appendChild(tr);
+        tr.setAttribute('data-jobid', job.id);
+        // #1: number
+        let td = document.createElement('td');
+        td.className = "text-right";
+        tr.appendChild(td).innerText = job.id;
+        // #2: range
+        td = document.createElement('td');
+        td.className = "text-right";
+        tr.appendChild(td).innerText = `${job.startRow}:${job.endRow}`;
+        // #3: status
+        td = document.createElement('td');
+        td.className = "text-right";
+        tr.appendChild(td).innerText = 'PENDING';
+        // #4: elapsed
+        td = document.createElement('td');
+        td.className = "text-right";
+        tr.appendChild(td)
+      }
+    </script>
+
+</body>

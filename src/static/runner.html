@@ -1,0 +1,194 @@
+<!--
+Copyright 2023-2024 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<script>
+  /**
+   * Handles the orchestration of running parallel jobs in apps script on the
+   * server side. Handles splitting jobs, waiting for jobs to complete,
+   * compiling results and logs, etc.
+   */
+  const RUNNER_STATUS_IDLE = 'IDLE';
+  const RUNNER_STATUS_RUNNING = 'RUNNING';
+  const JOB_STATUS_RUNNING = 'RUNNING';
+  const JOB_STATUS_PENDING = 'PENDING';
+  const JOB_STATUS_COMPLETE = 'COMPLETE';
+  const JOB_STATUS_ERROR = 'ERROR';
+  const JOB_STATUS_CALCELLED = 'CANCELLED';
+  const MAX_RUNNING_JOBS = 2;
+
+  class Runner {
+    constructor(options) {
+      this.runnerJobs = {};
+      this.command = '';
+      this.progressCallback = null;
+      this.completionCallback = null;
+      this.logger = null;
+      this.runnerStatus = RUNNER_STATUS_IDLE;
+      this.maxRunningJobs = options?.maxRunningJobs || MAX_RUNNING_JOBS;
+      this.tracing = !!options?.tracing;
+    }
+
+    /**
+     * Executes pending jobs respecting limit set by maxRunningJobs.
+     */
+    runJobs() {
+      this.trace('runJobs: enter');
+      const pendingJobs = [];
+      let runningCount = 0;
+      for (let id of Object.keys(this.runnerJobs)) {
+        const job = this.runnerJobs[id];
+        if (job.status == JOB_STATUS_PENDING) {
+          pendingJobs.push(job);
+        } else if (job.status == JOB_STATUS_RUNNING) {
+          runningCount++;
+        }
+      }
+      this.trace(`runJobs: pending ${pendingJobs.length} jobs, running - ${runningCount}`);
+      while (pendingJobs.length > 0 && runningCount < this.maxRunningJobs) {
+        const job = pendingJobs.shift();
+        job.status = JOB_STATUS_RUNNING;
+        if (this.progressCallback) {
+          this.progressCallback(job);
+        }
+        this.trace('rubJobs: starting job: ' + JSON.stringify(job))
+        google.script.run
+          .withSuccessHandler((i) => this.successHandler(i))
+          .withFailureHandler((e) => this.errorHandler(i))
+          .onClientCall(this.command, JSON.stringify(job));
+        runningCount++;
+      }
+    }
+
+    /**
+     * Checks the status of the jobs, if all jobs are finished invokes callback
+     * and passes the jobs as a parameter
+     */
+    processStatus() {
+      this.trace('processStatus: enter');
+      this.runJobs();
+
+      for (let id of Object.keys(this.runnerJobs)) {
+        const job = this.runnerJobs[id];
+        if (job.status == JOB_STATUS_RUNNING) {
+          this.trace('processStatus: a job is running, exiting');
+          return;
+        }
+      }
+      if (this.completionCallback) {
+        this.trace('processStatus: all job completed');
+        this.completionCallback(Object.values(this.runnerJobs));
+      }
+    }
+
+    /**
+     * Default success handler for server side interactions
+     *
+     * @param {String} input - the serialized job that was executed
+     */
+    successHandler(input) {
+      this.trace('job completed: ' + input);
+      const job = JSON.parse(input);
+      job.status = JOB_STATUS_COMPLETE;
+      this.runnerJobs[job.id] = job;
+      if (this.progressCallback) {
+        this.progressCallback(job);
+      }
+      this.processStatus();
+    }
+
+    /**
+     * Default error handler for server side interactions
+     *
+     * @param {String} input - the serialized job that was executed
+     */
+    errorHandler(input) {
+      this.trace('job failed: ' + input);
+      const job = JSON.parse(input);
+      job.status = JOB_STATUS_ERROR;
+      this.runnerJobs[job.id] = job;
+      if (this.progressCallback) {
+        this.progressCallback(job);
+      }
+      this.processStatus();
+    }
+
+    /**
+     * Executes commands on the server side, each instance in the jobs array
+     * will be processed as one call to the function identified.
+     *
+     * @param {String} command - name of the function to be called on the server side
+     * @param {Array} jobs - arrays of "jobs", each job in the list will spawn one
+     *        server side call, and it will be passed as parameter
+     * @param [progressCallback] - Callback to be invoked for each job that finishes.
+     */
+    run(command, jobs, progressCallback) {
+      this.trace(`Staring runner for '${command}' and ${jobs.length} jobs`);
+      return new Promise((resolve, reject) => {
+        if (this.runnerStatus == RUNNER_STATUS_RUNNING) {
+          reject('Runner is already processing a job!');
+        } else {
+          this.completionCallback = resolve;
+          this.progressCallback = progressCallback;
+          this.command = command;
+          this.runnerJobs = {};
+          for (let i = 0; i < jobs.length; i++) {
+            let job = jobs[i];
+            job.id = job.id === undefined ? i : job.id;
+            job.status = JOB_STATUS_PENDING;
+            this.runnerJobs[i] = job;
+          }
+          this.trace('Beginning processing jobs: ' + JSON.stringify(jobs));
+          this.processStatus();
+        }
+      });
+    }
+
+    /**
+     * Tries to stop execution.
+     * Effectively it marks all pending jobs as Cancelled.
+     */
+    stop() {
+      for (let id of Object.keys(this.runnerJobs)) {
+        const job = this.runnerJobs[id];
+        if (job.status === JOB_STATUS_PENDING || job.status === JOB_STATUS_RUNNING) {
+          job.status = JOB_STATUS_CALCELLED;
+        }
+      }
+    }
+
+    /**
+     * Log a message.
+     * @param {String} msg - message
+     */
+    log(msg) {
+      if (this.logger) {
+        this.logger('Runner: ' + msg);
+      } else {
+        console.log(msg);
+      }
+    }
+
+    /**
+     * Log a message if tracing is enabled.
+     * @param {String} msg - message
+     */
+    trace(msg) {
+      if (this.tracing) {
+        this.log(msg);
+      }
+    }
+  }
+
+</script>

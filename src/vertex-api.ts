@@ -78,7 +78,7 @@ export class GeminiVertexApi {
     }
     this.modelParams = Object.assign(modelParams, {
       candidateCount: 1,
-      response_mime_type: 'application/json',
+      //response_mime_type: 'application/json',
     });
 
     this.logging = false;

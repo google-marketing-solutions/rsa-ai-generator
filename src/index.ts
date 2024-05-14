@@ -15,8 +15,10 @@
  */
 
 import { app } from './app';
+import { clientside } from './client';
 
 app;
+clientside;
 
 /**
  * The only function that is needed to be called in client project
@@ -30,15 +32,19 @@ function onOpen(var_name: string) {
       functionName: var_name + '.fetch_keywords',
     },
     {
-      name: 'Generate headlines/descriptions via AI',
+      name: ' - Generate headlines/descriptions via AI',
       functionName: var_name + '.generate_rsa',
     },
     {
-      name: 'Generate data for Google Ads Editor',
+      name: ' - Open sidebar with generation interface',
+      functionName: var_name + '.open_sidebar',
+    },
+    {
+      name: ' - - Generate data for Google Ads Editor',
       functionName: var_name + '.generate_ads_editor',
     },
     {
-      name: 'Generate customizer feed for Google Ads',
+      name: ' - Generate customizer feed for Google Ads',
       functionName: var_name + '.generate_customizer_feed',
     },
     null,
