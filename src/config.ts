@@ -27,6 +27,7 @@ interface Settings {
   CLOUD_PROJECT_REGION: string;
   CUSTOMER_NAME: string;
   LLM_Name: string;
+  LLM_Uri: string;
   LLM_Params_temperature: string;
   LLM_Params_topK: string;
   LLM_Params_topP: string;
@@ -61,6 +62,7 @@ export const SETTINGS: Settings = {
   CLOUD_PROJECT_REGION: '',
   CUSTOMER_NAME: '',
   LLM_Name: '',
+  LLM_Uri: '',
   LLM_Params_temperature: '',
   LLM_Params_topK: '',
   LLM_Params_topP: '',
@@ -228,6 +230,11 @@ export function reset_configuration() {
       SETTINGS.LLM_Params_temperature,
       '',
       'The temperature is used for sampling during the response generation, which occurs when topP and topK are applied. Temperature controls the degree of randomness in token selection. Default: 0.9. See details on https://ai.google.dev/docs/concepts#model-parameters',
+    ],
+    [
+      SETTINGS.LLM_Name,
+      '', // gemini-pro
+      "AI model name to use. By default it's the latest 'gemini-pro' (publishers/google/models/gemini-pro). For full customization you can use the LLM_Uri setting with an abritrary model endpoint compatible with Vertex AI API",
     ],
     [
       SETTINGS.LLM_Params_topK,

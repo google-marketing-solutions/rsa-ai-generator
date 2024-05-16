@@ -43,7 +43,9 @@ export class GeminiVertexApi {
       this.configReader.getValue(SETTINGS.LLM_Name) ||
       Config.vertexAi.modelName ||
       'gemini-pro';
-    this.url = `https://${gcpRegion}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${gcpRegion}/publishers/google/models/${modelName}:streamGenerateContent`;
+    this.url =
+      this.configReader.getValue(SETTINGS.LLM_Uri) ||
+      `https://${gcpRegion}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${gcpRegion}/publishers/google/models/${modelName}:streamGenerateContent`;
 
     const safetySettings = Object.assign({}, Config.vertexAi.safetySettings);
     for (const category of Object.keys(Config.vertexAi.safetySettings)) {
