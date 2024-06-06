@@ -58,7 +58,8 @@ export async function fetch_keywords() {
     PropertiesService.getDocumentProperties().getProperty(
       SETTINGS.ADS_DEV_TOKEN
     );
-  if (!devToken) {
+
+  if (!devToken && !ConfigReader.getValue(SETTINGS.ADS_INTERNAL_PROXY)) {
     SpreadsheetApp.getUi().alert(
       'Please specify a developer token either on the Configuration sheet or enter via prompt from the menu (to keep it secretly)'
     );
