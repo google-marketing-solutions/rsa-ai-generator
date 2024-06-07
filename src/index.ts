@@ -32,11 +32,11 @@ function onOpen(var_name: string) {
       functionName: var_name + '.fetch_keywords',
     },
     {
-      name: ' - Generate headlines/descriptions via AI',
+      name: ' - Generate headlines/descriptions via AI (option 1)',
       functionName: var_name + '.generate_rsa',
     },
     {
-      name: ' - Open sidebar with generation interface',
+      name: ' - Open sidebar with generation interface (option 2)',
       functionName: var_name + '.open_sidebar',
     },
     {

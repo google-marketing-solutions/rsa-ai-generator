@@ -780,9 +780,14 @@ Keywords capture what users search on google.com while headlines and description
 
 1. Please generate 15 best selling creative headlines of maximum 25 characters each for a Google Ads search campaign (RSA).
 2. Use the keywords below (in the "Input Keywords" section) as input.
-3. Concise Formatting: Do not add any additional text, symbols, emoji, or formatting (e.g. Markdown) to your JSON response.
-4. Language Matching: Detect the language of each input keyword and generate the headline in the same language.
-5. Output Format: Return a JSON array of strings, where each string is a headline. Do not add anything around the code block.
+3. Output Format: Return a JSON array of strings, where each string is a headline. Don't add anything around the code block.
+4. Concise Formatting: Don't add any additional text, symbols, emoji, or formatting (e.g. Markdown) to your JSON response.
+5. Language Matching: Detect the language of each input keyword and generate the headline in the same language.
+6. Use the following guidelines for headlines text:
+  * No Business Name in Headline
+  * No Symbols & Emojis: Don't add punctuation and/or symbols that don't make sense, emojis are also not allowed
+  * No Exclamation Marks
+  * No 'Quick' Promises: Don't promise a quick solution to major issues (for example "lose weight overnight")
 
 *Input Keywords* (one per line):
 {KEYWORDS}
@@ -800,9 +805,14 @@ Keywords capture what users search on google.com while headlines and description
 *Instructions*:
 1. Please generate 4 best selling creative descriptions of maximum 80 characters each for a Google Ads search campaign (RSA)
 2. Use the keywords (in the "Input Keywords" section) and headlines (in the "Input Headlines" section) below as input.
-3. Concise Formatting: Do not add any additional text, symbols, emoji, or formatting (e.g. Markdown) to your JSON response.
-4. Language Matching: Detect the language of each input keyword and generate the headline in the same language.
-5. Output Format: Return a JSON array of strings, where each string is a description. Do not add anything around the code block.
+3. Output Format: Return a JSON array of strings, where each string is a description. Don't add anything around the code block.
+4. Concise Formatting: Don't add any additional text, symbols, emoji, or formatting (e.g. Markdown) to your JSON response.
+5. Language Matching: Detect the language of each input keyword and generate the headline in the same language.
+6. Use the following guidelines for descriptions text:
+  * Related to Headlines: the description should provide additional information and context that supports the headlines.
+  * No Excessive Punctuation: Just as in headlines, don't use excessive or unnecessary punctuation marks.
+  * No Repetition: Don't repeat the same phrases you've used in other elements of the ad.
+  * No 'Quick' Promises: As in headlines, don't promise a quick solution to significant issues.
 
 *Input Keywords* (one per line):
 {KEYWORDS}
@@ -859,35 +869,48 @@ Input Keywords (one per line):
     this.history = [];
   }
 
-  _normalizeReply(reply: string) {
+  _normalizeAdText(text: string) {
+    text = text
+      .replaceAll('"', '')
+      .replaceAll("'", '')
+      .replaceAll('**', '')
+      .replaceAll('  ', ' ')
+      .replaceAll('!', '');
+    if (text.startsWith(this.customerName + ':')) {
+      text = text.substring((this.customerName + ':').length, text.length);
+    }
+    return text;
+  }
+
+  _normalizeReply(reply: string): string[] {
     reply = reply || '';
-    let headlines = '';
+    let texts: undefined | string[] = undefined;
     try {
       reply = reply.replaceAll(/```\s*(json|JSON)/g, '').replaceAll(/```/g, '');
       const jsonReply = JSON.parse(reply);
-      headlines = jsonReply.join('\n');
+      // we expect to get an array of strings
+      if (jsonReply.length) {
+        texts = jsonReply;
+      }
     } catch (e) {
       Logger.log(
         `WARNING: failed to parse response as JSON: ${e}, falling back to text`
       );
     }
-    if (headlines) {
-      return headlines;
-    }
-    const lines = reply.split('\n');
-    headlines = lines
-      .map(line => {
+    if (!texts) {
+      texts = reply.split('\n').map(line => {
         line = line.replace(/^\s*[\d]+.?\s+|^\s+|^\*\s*|^-\s*|^•\s*|\[|\]/, '');
-        if (line.startsWith(this.customerName + ':')) {
-          line = line.substring((this.customerName + ':').length, line.length);
-        }
         return line;
-      })
-      .join('\n')
-      .replaceAll('**', '')
-      .replaceAll('  ', ' ')
-      .trim();
-    return headlines;
+      });
+    }
+    if (texts) {
+      texts = texts
+        .map(text => {
+          return this._normalizeAdText(text);
+        })
+        .filter(text => text && text.length > 0);
+    }
+    return texts;
   }
 
   /**
@@ -901,8 +924,8 @@ Input Keywords (one per line):
     let prompt = this.getHeadlinesPrompt(adgroup);
     Logger.log(`Sending a prompt (headlines): ${prompt}`);
 
-    let reply = this.api.predict(prompt, this.history);
-    reply = this._normalizeReply(reply);
+    let replyRaw = this.api.predict(prompt, this.history);
+    let reply = this._normalizeReply(replyRaw);
     Logger.log(
       `[AdGroup ${adgroup.adgroup_id}] Model's reply (normalized): ${reply}`
     );
@@ -911,38 +934,33 @@ Input Keywords (one per line):
     }
     const MAX = Config.ads.rsa_headline_max_length;
     const MIN = Config.ads.rsa_headline_min_length;
-    const orgHeadlinesArr = reply ? reply.split('\n') : [];
-    let longLines = orgHeadlinesArr.filter(
+    let longLines = reply.filter(
       line => line.length > MAX || line.length < MIN
     );
-    const headlines = orgHeadlinesArr.filter(
+    const headlines = reply.filter(
       line => line.length <= MAX && line.length >= MIN
     );
     if (longLines.length > 0) {
       Logger.log(
-        `Model's response contains too long or too short headlines (${longLines.length} of ${orgHeadlinesArr.length}), trying to rewrite`
+        `Model's response contains too long or too short headlines (${longLines.length} of ${reply.length}), trying to rewrite`
       );
       // 2nd attempt
       prompt = this.getHeadlines2ndPrompt(adgroup, longLines);
       Logger.log(`Sending 2nd prompt: ${prompt}`);
-      reply = this.api.predict(prompt, this.history);
-      reply = this._normalizeReply(reply);
+      replyRaw = this.api.predict(prompt, this.history);
+      reply = this._normalizeReply(replyRaw);
       Logger.log(
         `[AdGroup ${adgroup.adgroup_id}] Model's 2nd reply (normalized): ${reply}`
       );
-      const longLines2 = reply
-        ? reply
-            .split('\n')
-            .filter(line => line.length > MAX || line.length < MIN)
-        : [];
+      const longLines2 = reply.filter(
+        line => line.length > MAX || line.length < MIN
+      );
       if (longLines2.length) {
         longLines = longLines2;
       }
-      const newHeadlines = reply
-        ? reply
-            .split('\n')
-            .filter(line => line.length <= MAX && line.length >= MIN)
-        : [];
+      const newHeadlines = reply.filter(
+        line => line.length <= MAX && line.length >= MIN
+      );
       headlines.push(...newHeadlines);
 
       if (longLines2.length) {
@@ -968,8 +986,8 @@ Input Keywords (one per line):
     const prompt = this.getDescriptionsPrompt(adgroup);
     Logger.log(`Sending a prompt (descriptions): ${prompt}`);
 
-    let reply = this.api.predict(prompt);
-    reply = this._normalizeReply(reply);
+    const replyRaw = this.api.predict(prompt);
+    const reply = this._normalizeReply(replyRaw);
     Logger.log(
       `[AdGeoup ${adgroup.adgroup_id}] Model's descriptions reply (normalized): ${reply}`
     );
@@ -977,24 +995,22 @@ Input Keywords (one per line):
 
     const MIN = Config.ads.rsa_description_min_length;
     const MAX = Config.ads.rsa_description_max_length;
-    const descriptions = reply
-      ? reply
-          .split('\n')
-          .filter(line => line.length <= MAX && line.length >= MIN)
-      : [];
-    const long_lines = reply
-      ? reply.split('\n').filter(line => line.length > MAX || line.length < MIN)
-      : [];
+    const descriptions = reply.filter(
+      line => line.length <= MAX && line.length >= MIN
+    );
+    const longLines = reply.filter(
+      line => line.length > MAX || line.length < MIN
+    );
 
     Logger.log(
       `[AdGroup ${
         adgroup.adgroup_id
       }]: generated descriptions: ${descriptions.join(';')}`
     );
-    if (long_lines.length > 0) {
-      Logger.log(`${long_lines.length} descriptions are longer ${MAX}`);
+    if (longLines.length > 0) {
+      Logger.log(`${longLines.length} descriptions are longer ${MAX}`);
       descriptions.push('\nDescriptions longer than ' + MAX + ':');
-      descriptions.push(...long_lines);
+      descriptions.push(...longLines);
     }
     return descriptions.join('\n');
   }
@@ -1064,9 +1080,9 @@ Input Keywords (one per line):
         ),
       }
     );
-    let reply = this.api.predict(prompt);
-    reply = this._normalizeReply(reply);
-    return reply.split('\n');
+    const replyRaw = this.api.predict(prompt);
+    const reply = this._normalizeReply(replyRaw);
+    return reply;
   }
 
   _getPrompt(

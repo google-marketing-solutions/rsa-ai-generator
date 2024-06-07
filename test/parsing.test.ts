@@ -32,7 +32,7 @@ const Logger: GoogleAppsScript.Base.Logger = {
 global.Logger = Logger;
 
 describe('parsing', () => {
-  it('json response', () => {
+  it('json response as code block', () => {
     const resText = `\`\`\` JSON
 ["headline1", "headline2"]
 \`\`\`
@@ -40,7 +40,14 @@ describe('parsing', () => {
     const api = new GeminiVertexApi('', new ConfigMockReader());
     const predictor = new Predictor(api, '');
     const res = predictor._normalizeReply(resText);
-    const resExpected = 'headline1\nheadline2';
-    expect(res).toEqual(resExpected);
+    expect(res).toEqual(['headline1', 'headline2']);
+  });
+
+  it('json response as text', () => {
+    const resText = `["headline1", "headline2"]`;
+    const api = new GeminiVertexApi('', new ConfigMockReader());
+    const predictor = new Predictor(api, '');
+    const res = predictor._normalizeReply(resText);
+    expect(res).toEqual(['headline1', 'headline2']);
   });
 });
