@@ -26,7 +26,6 @@ limitations under the License.
   const JOB_STATUS_COMPLETE = 'COMPLETE';
   const JOB_STATUS_ERROR = 'ERROR';
   const JOB_STATUS_CALCELLED = 'CANCELLED';
-  const MAX_RUNNING_JOBS = 2;
 
   class Runner {
     constructor(options) {
@@ -36,7 +35,7 @@ limitations under the License.
       this.completionCallback = null;
       this.logger = null;
       this.runnerStatus = RUNNER_STATUS_IDLE;
-      this.maxRunningJobs = options?.maxRunningJobs || MAX_RUNNING_JOBS;
+      this.maxRunningJobs = options?.maxRunningJobs || Runner.MAX_RUNNING_JOBS_DEFAULT;
       this.tracing = !!options?.tracing;
     }
 
@@ -191,4 +190,5 @@ limitations under the License.
     }
   }
 
+  Runner.MAX_RUNNING_JOBS_DEFAULT = 2;
 </script>
